@@ -1,2 +1,0 @@
-# PGIS
-DGU PGIS
