@@ -141,11 +141,27 @@ def inject_css() -> None:
             --glass-rose: #fb7185;
             --glass-amber: #f59e0b;
             --glass-green: #34d399;
+            --drawer-width: min(410px, calc(100vw - 58px));
+            --drawer-handle: 38px;
+            --left-drawer-x: calc(-100% - 1px);
+            --right-drawer-x: calc(100% + 1px);
+            --left-handle-left: 0px;
+            --right-handle-right: 0px;
         }
 
         html, body, [data-testid="stAppViewContainer"], .stApp {
             background: #060811;
             color: var(--glass-text);
+            overflow: hidden;
+        }
+
+        [data-testid="stAppViewContainer"],
+        section.main,
+        [data-testid="stMain"] {
+            width: 100vw !important;
+            max-width: 100vw !important;
+            min-width: 100vw !important;
+            margin-left: 0 !important;
         }
 
         .stApp::before {
@@ -154,10 +170,10 @@ def inject_css() -> None:
             inset: 0;
             pointer-events: none;
             background:
-                linear-gradient(115deg, transparent 0 12%, rgba(34, 211, 238, 0.12) 12% 13%, transparent 13% 31%, rgba(251, 113, 133, 0.11) 31% 32%, transparent 32% 54%, rgba(245, 158, 11, 0.10) 54% 55%, transparent 55%),
-                linear-gradient(42deg, rgba(52, 211, 153, 0.08) 0 11%, transparent 11% 28%, rgba(167, 139, 250, 0.10) 28% 29%, transparent 29% 61%, rgba(56, 189, 248, 0.08) 61% 62%, transparent 62%),
+                linear-gradient(116deg, transparent 0 18%, rgba(34, 211, 238, 0.14) 18% 18.5%, transparent 18.5% 43%, rgba(251, 113, 133, 0.12) 43% 43.45%, transparent 43.45% 71%, rgba(245, 158, 11, 0.11) 71% 71.5%, transparent 71.5%),
+                linear-gradient(38deg, rgba(52, 211, 153, 0.08) 0 10%, transparent 10% 36%, rgba(167, 139, 250, 0.10) 36% 36.45%, transparent 36.45% 66%, rgba(56, 189, 248, 0.08) 66% 66.4%, transparent 66.4%),
                 #060811;
-            opacity: 0.95;
+            opacity: 0.82;
             z-index: -2;
         }
 
@@ -176,19 +192,48 @@ def inject_css() -> None:
         }
 
         [data-testid="stHeader"] {
-            background: rgba(6, 8, 17, 0.66);
-            backdrop-filter: blur(18px);
+            display: none;
         }
 
         [data-testid="stSidebar"] {
-            background: rgba(5, 8, 15, 0.90);
-            border-right: 1px solid rgba(226, 232, 240, 0.10);
+            position: fixed;
+            inset: 0 auto 0 0;
+            width: var(--drawer-width) !important;
+            min-width: var(--drawer-width) !important;
+            max-width: var(--drawer-width) !important;
+            height: 100vh;
+            background:
+                linear-gradient(128deg, rgba(34, 211, 238, 0.10), transparent 22% 54%, rgba(251, 113, 133, 0.10)),
+                rgba(2, 5, 12, 0.94);
+            border-right: 1px solid rgba(226, 232, 240, 0.22);
+            box-shadow: 22px 0 65px rgba(0, 0, 0, 0.58);
+            transform: translateX(var(--left-drawer-x));
+            transition: transform 180ms ease, box-shadow 180ms ease;
+            z-index: 40;
+        }
+
+        [data-testid="stSidebar"]::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 4px;
+            height: 100%;
+            background:
+                linear-gradient(180deg, #22d3ee, #a78bfa 42%, #fb7185 74%, #f59e0b);
+            opacity: 0.82;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+            padding: 1rem 1rem 1.2rem;
+            overflow-x: hidden;
         }
 
         .block-container {
-            padding-top: 1.8rem;
-            padding-bottom: 2rem;
-            max-width: 1480px;
+            padding: 0 !important;
+            max-width: 100vw;
+            width: 100vw;
+            min-height: 100vh;
         }
 
         h1, h2, h3, h4, p, label, span {
@@ -230,11 +275,13 @@ def inject_css() -> None:
         }
 
         .stat-tile, .glass-panel, .spot-card {
-            border: 1px solid rgba(226, 232, 240, 0.14);
-            background: var(--glass-bg);
-            backdrop-filter: blur(20px);
-            border-radius: 8px;
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24);
+            border: 1px solid rgba(226, 232, 240, 0.18);
+            background:
+                linear-gradient(132deg, rgba(34, 211, 238, 0.10), transparent 24% 58%, rgba(251, 113, 133, 0.09)),
+                rgba(2, 6, 14, 0.86);
+            backdrop-filter: blur(20px) saturate(1.15);
+            border-radius: 0;
+            box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
         }
 
         .stat-tile {
@@ -259,6 +306,17 @@ def inject_css() -> None:
         .glass-panel {
             padding: 1rem;
             margin-bottom: 1rem;
+            position: relative;
+        }
+
+        .glass-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(115deg, transparent 0 34%, rgba(34, 211, 238, 0.16) 34% 34.35%, transparent 34.35% 68%, rgba(251, 113, 133, 0.14) 68% 68.35%, transparent 68.35%),
+                linear-gradient(34deg, transparent 0 48%, rgba(245, 158, 11, 0.12) 48% 48.35%, transparent 48.35%);
         }
 
         .spot-card {
@@ -288,10 +346,10 @@ def inject_css() -> None:
             align-items: center;
             min-height: 26px;
             padding: 0.2rem 0.48rem;
-            border-radius: 999px;
-            border: 1px solid rgba(226, 232, 240, 0.16);
+            border-radius: 0;
+            border: 1px solid rgba(226, 232, 240, 0.20);
             color: #e2e8f0;
-            background: rgba(15, 23, 42, 0.76);
+            background: rgba(3, 7, 18, 0.78);
             font-size: 0.78rem;
         }
 
@@ -302,24 +360,138 @@ def inject_css() -> None:
         }
 
         .map-wrap {
-            border: 1px solid rgba(226, 232, 240, 0.16);
-            background: rgba(2, 6, 23, 0.82);
-            border-radius: 8px;
-            padding: 0.55rem;
-            overflow: hidden;
+            position: absolute;
+            width: 0;
+            height: 0;
+            border: 0;
+            background: transparent;
+            border-radius: 0;
+            padding: 0;
+            overflow: visible;
+            pointer-events: none;
         }
 
-        .map-wrap iframe {
-            border-radius: 6px;
+        .map-wrap iframe,
+        div[data-testid="stHorizontalBlock"]:has(.map-wrap) iframe,
+        iframe[title^="streamlit_folium"] {
+            position: fixed;
+            inset: 0;
+            width: 100vw !important;
+            height: 100vh !important;
+            border-radius: 0;
+            border: 0;
+            display: block;
+            z-index: 1;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.map-wrap) {
+            gap: 0 !important;
+            min-height: 100vh;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.map-wrap) > div[data-testid="column"]:first-child {
+            width: 100vw !important;
+            flex: 1 1 100vw !important;
+            min-width: 100vw !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.map-wrap) > div[data-testid="column"]:nth-child(2) {
+            position: fixed;
+            inset: 0 0 0 auto;
+            width: var(--drawer-width) !important;
+            min-width: var(--drawer-width) !important;
+            max-width: var(--drawer-width) !important;
+            height: 100vh;
+            padding: 1rem 1rem 1.25rem calc(var(--drawer-handle) + 0.9rem);
+            overflow-y: auto;
+            overflow-x: hidden;
+            background:
+                linear-gradient(232deg, rgba(251, 113, 133, 0.10), transparent 24% 56%, rgba(34, 211, 238, 0.10)),
+                rgba(2, 5, 12, 0.94);
+            border-left: 1px solid rgba(226, 232, 240, 0.22);
+            box-shadow: -22px 0 65px rgba(0, 0, 0, 0.58);
+            transform: translateX(var(--right-drawer-x));
+            transition: transform 180ms ease, box-shadow 180ms ease;
+            z-index: 35;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.map-wrap) > div[data-testid="column"]:nth-child(2)::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background:
+                linear-gradient(180deg, #fb7185, #a78bfa 38%, #22d3ee 70%, #34d399);
+            opacity: 0.82;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(.map-wrap) > div[data-testid="column"]:nth-child(2) .glass-panel {
+            margin-bottom: 0.8rem;
+        }
+
+        .drawer-handle,
+        .st-key-left_drawer_handle,
+        .st-key-right_drawer_handle {
+            position: fixed;
+            top: 50%;
+            width: var(--drawer-handle) !important;
+            min-width: var(--drawer-handle) !important;
+            transform: translateY(-50%);
+            z-index: 70;
+        }
+
+        .drawer-handle-left,
+        .st-key-left_drawer_handle {
+            left: var(--left-handle-left);
+        }
+
+        .drawer-handle-right,
+        .st-key-right_drawer_handle {
+            right: var(--right-handle-right);
+        }
+
+        .drawer-handle button,
+        .st-key-left_drawer_handle button,
+        .st-key-right_drawer_handle button {
+            width: var(--drawer-handle) !important;
+            min-width: var(--drawer-handle) !important;
+            height: 132px;
+            padding: 0 !important;
+            border-radius: 0 !important;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            letter-spacing: 0 !important;
+            font-size: 0.78rem;
+            font-weight: 900;
+            color: #f8fafc !important;
+            background:
+                linear-gradient(180deg, rgba(34, 211, 238, 0.22), transparent 34% 66%, rgba(251, 113, 133, 0.20)),
+                rgba(3, 7, 18, 0.94) !important;
+            border: 1px solid rgba(226, 232, 240, 0.30) !important;
+            box-shadow: 0 16px 42px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255,255,255,0.04);
+        }
+
+        .drawer-handle button:hover,
+        .st-key-left_drawer_handle button:hover,
+        .st-key-right_drawer_handle button:hover {
+            border-color: rgba(34, 211, 238, 0.86) !important;
+            color: #ffffff !important;
+            background:
+                linear-gradient(180deg, rgba(34, 211, 238, 0.30), transparent 34% 66%, rgba(251, 113, 133, 0.28)),
+                rgba(2, 6, 14, 0.98) !important;
         }
 
         .stButton > button,
         .stDownloadButton > button,
         [data-testid="stBaseButton-secondary"],
         [data-testid="stBaseButton-primary"] {
-            border-radius: 8px;
-            border: 1px solid rgba(226, 232, 240, 0.18);
-            background: rgba(15, 23, 42, 0.78);
+            border-radius: 0;
+            border: 1px solid rgba(226, 232, 240, 0.22);
+            background:
+                linear-gradient(115deg, rgba(34, 211, 238, 0.12), transparent 40% 62%, rgba(251, 113, 133, 0.12)),
+                rgba(3, 7, 18, 0.86);
             color: #f8fafc;
             min-height: 42px;
         }
@@ -331,19 +503,21 @@ def inject_css() -> None:
         }
 
         [data-testid="stBaseButton-primary"] {
-            background: linear-gradient(90deg, rgba(34, 211, 238, 0.92), rgba(251, 113, 133, 0.88));
-            color: #06111e;
+            background:
+                linear-gradient(90deg, rgba(34, 211, 238, 0.34), rgba(251, 113, 133, 0.30)),
+                rgba(3, 7, 18, 0.96);
+            color: #ffffff;
             font-weight: 850;
         }
 
         input, textarea, [data-baseweb="select"] > div {
-            border-radius: 8px !important;
+            border-radius: 0 !important;
         }
 
         div[data-testid="stFileUploaderDropzone"] {
-            border-radius: 8px;
+            border-radius: 0;
             border-color: rgba(34, 211, 238, 0.36);
-            background: rgba(15, 23, 42, 0.55);
+            background: rgba(3, 7, 18, 0.72);
         }
 
         .leaflet-popup-content-wrapper,
@@ -352,6 +526,7 @@ def inject_css() -> None:
             color: #f8fafc;
             border: 1px solid rgba(226, 232, 240, 0.16);
             box-shadow: 0 18px 42px rgba(0, 0, 0, 0.44);
+            border-radius: 0;
         }
 
         .leaflet-popup-content {
@@ -379,6 +554,21 @@ def inject_css() -> None:
         """,
         unsafe_allow_html=True,
     )
+    left_open = bool(st.session_state.get("left_drawer_open", False))
+    right_open = bool(st.session_state.get("right_drawer_open", False))
+    st.markdown(
+        f"""
+        <style>
+        :root {{
+            --left-drawer-x: {"0" if left_open else "calc(-100% - 1px)"};
+            --right-drawer-x: {"0" if right_open else "calc(100% + 1px)"};
+            --left-handle-left: {"var(--drawer-width)" if left_open else "0px"};
+            --right-handle-right: {"var(--drawer-width)" if right_open else "0px"};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def ensure_state() -> None:
@@ -390,6 +580,8 @@ def ensure_state() -> None:
         "time_filter": TIME_OPTIONS.copy(),
         "search_query": "",
         "map_zoom": 12,
+        "left_drawer_open": False,
+        "right_drawer_open": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -521,13 +713,39 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         tiles=None,
         control_scale=True,
         prefer_canvas=True,
+        max_zoom=19,
     )
     folium.TileLayer(
         tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
         attr="&copy; OpenStreetMap contributors &copy; CARTO",
         name="Dark Matter",
         control=False,
+        max_zoom=19,
+        max_native_zoom=19,
     ).add_to(fmap)
+    fmap.get_root().header.add_child(
+        folium.Element(
+            """
+            <style>
+            html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                background: #060811;
+            }
+            .folium-map {
+                width: 100% !important;
+                height: 100vh !important;
+            }
+            .leaflet-container {
+                background: #060811;
+            }
+            </style>
+            """
+        )
+    )
 
     lat, lng = st.session_state.selected_point
     folium.CircleMarker(
@@ -724,6 +942,23 @@ def render_sidebar(spots: list[dict[str, Any]]) -> None:
         )
 
 
+def render_drawer_handles() -> None:
+    left_label = "닫기" if st.session_state.left_drawer_open else "필터"
+    right_label = "닫기" if st.session_state.right_drawer_open else "기록"
+
+    st.markdown('<div class="drawer-handle drawer-handle-left">', unsafe_allow_html=True)
+    if st.button(left_label, key="left_drawer_handle", help="필터 패널 열기/닫기"):
+        st.session_state.left_drawer_open = not st.session_state.left_drawer_open
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="drawer-handle drawer-handle-right">', unsafe_allow_html=True)
+    if st.button(right_label, key="right_drawer_handle", help="기록 패널 열기/닫기"):
+        st.session_state.right_drawer_open = not st.session_state.right_drawer_open
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def add_spot(
     title: str,
     lat: float,
@@ -863,10 +1098,6 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
     if not map_data:
         return
 
-    center = map_data.get("center")
-    if center and "lat" in center and "lng" in center:
-        st.session_state.map_zoom = map_data.get("zoom", st.session_state.map_zoom)
-
     tooltip = map_data.get("last_object_clicked_tooltip")
     if tooltip:
         try:
@@ -888,9 +1119,9 @@ def render_map(spots: list[dict[str, Any]]) -> None:
     fmap = build_map(spots)
     map_data = st_folium(
         fmap,
-        height=675,
+        height=1200,
         use_container_width=True,
-        returned_objects=["last_clicked", "last_object_clicked_tooltip", "center", "zoom"],
+        returned_objects=["last_clicked", "last_object_clicked_tooltip"],
         key="photo_spot_map",
     )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -898,13 +1129,13 @@ def render_map(spots: list[dict[str, Any]]) -> None:
 
 
 def main() -> None:
-    inject_css()
     ensure_state()
+    inject_css()
     spots = filtered_spots()
+    render_drawer_handles()
     render_sidebar(spots)
-    render_header(spots)
 
-    map_col, tool_col = st.columns([1.72, 1], gap="large")
+    map_col, tool_col = st.columns([1, 0.0001], gap="small")
     with map_col:
         render_map(spots)
     with tool_col:
