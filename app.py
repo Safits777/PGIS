@@ -5,10 +5,12 @@ import base64
 import csv
 import html
 import io
+import math
 import os
 import sys
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import streamlit as st
 
@@ -87,7 +89,7 @@ SAMPLE_SPOTS: list[dict[str, Any]] = [
         "time_band": "밤",
         "mood": "네온 반사",
         "camera": "24mm wide",
-        "memo": "비 온 직후 바닥 반사가 살아난다. 동쪽으로 낮게 잡으면 유리면과 물길이 같이 들어온다.",
+        "memo": "https://www.openstreetmap.org/?mlat=37.5684&mlon=126.9845#map=17/37.5684/126.9845",
         "photo_bytes": None,
         "photo_mime": None,
         "created_at": "sample",
@@ -102,7 +104,7 @@ SAMPLE_SPOTS: list[dict[str, Any]] = [
         "time_band": "해질녘",
         "mood": "역광 실루엣",
         "camera": "50mm",
-        "memo": "노을이 건물 뒤로 내려갈 때 인물 실루엣이 가장 깔끔하다.",
+        "memo": "https://www.openstreetmap.org/?mlat=37.5512&mlon=126.9882#map=17/37.5512/126.9882",
         "photo_bytes": None,
         "photo_mime": None,
         "created_at": "sample",
@@ -117,7 +119,7 @@ SAMPLE_SPOTS: list[dict[str, Any]] = [
         "time_band": "새벽",
         "mood": "낮은 채도",
         "camera": "35mm",
-        "memo": "해가 올라오기 전 20분 동안 수면과 하늘색이 가장 부드럽다.",
+        "memo": "https://www.openstreetmap.org/?mlat=37.5287&mlon=126.9326#map=17/37.5287/126.9326",
         "photo_bytes": None,
         "photo_mime": None,
         "created_at": "sample",
@@ -631,6 +633,8 @@ def ensure_state() -> None:
         "map_zoom": 12,
         "left_drawer_open": False,
         "right_drawer_open": False,
+        "form_lat": SEOUL_CENTER[0],
+        "form_lng": SEOUL_CENTER[1],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -645,6 +649,44 @@ def compass_label(degrees: int | float) -> str:
     labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
     idx = int((float(degrees) + 22.5) // 45) % 8
     return labels[idx]
+
+
+def destination_point(lat: float, lng: float, bearing: float, distance_m: float = 360) -> tuple[float, float]:
+    radius = 6_371_000
+    bearing_rad = math.radians(bearing)
+    lat_rad = math.radians(lat)
+    lng_rad = math.radians(lng)
+    angular_distance = distance_m / radius
+
+    end_lat = math.asin(
+        math.sin(lat_rad) * math.cos(angular_distance)
+        + math.cos(lat_rad) * math.sin(angular_distance) * math.cos(bearing_rad)
+    )
+    end_lng = lng_rad + math.atan2(
+        math.sin(bearing_rad) * math.sin(angular_distance) * math.cos(lat_rad),
+        math.cos(angular_distance) - math.sin(lat_rad) * math.sin(end_lat),
+    )
+    return math.degrees(end_lat), math.degrees(end_lng)
+
+
+def is_valid_link(value: str | None) -> bool:
+    if not value:
+        return False
+    parsed = urlparse(value.strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def link_html(value: str | None, label: str = "링크 열기") -> str:
+    if not is_valid_link(value):
+        return '<span style="color:#64748b;">링크 없음</span>'
+    url = escape(str(value).strip())
+    text = escape(label)
+    return (
+        f'<a href="{url}" target="_blank" rel="noopener noreferrer" '
+        'style="color:#67e8f9;text-decoration:none;font-weight:900;'
+        'border-bottom:1px solid rgba(103,232,249,.45);">'
+        f"{text}</a>"
+    )
 
 
 def compress_photo(uploaded_file: Any) -> tuple[bytes, str]:
@@ -678,19 +720,18 @@ def popup_html(spot: dict[str, Any]) -> str:
             f'<img src="{img}" style="width:100%;max-height:150px;object-fit:cover;'
             'margin-bottom:10px;border:1px solid rgba(148,163,184,0.24);" />'
         )
-    direction = int(spot["direction"])
+    link = link_html(spot.get("memo"))
     return f"""
     <div style="width:282px;font-family:Inter,Arial,sans-serif;color:#f8fafc;background:#020611;">
         {image_html}
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
-            <div style="font-size:12px;color:#94a3b8;font-weight:800;text-transform:uppercase;">SPOT VECTOR</div>
+            <div style="font-size:12px;color:#94a3b8;font-weight:800;text-transform:uppercase;">SPOT NODE</div>
             <div style="font-size:16px;font-weight:900;line-height:1.25;color:#ffffff;">{escape(spot["title"])}</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
             <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
-                <div style="font-size:10px;color:#94a3b8;font-weight:800;">DIRECTION</div>
-                <div style="font-size:22px;font-weight:950;color:{color};line-height:1.1;">{direction}°</div>
-                <div style="font-size:12px;color:#e2e8f0;font-weight:800;">{compass_label(direction)}</div>
+                <div style="font-size:10px;color:#94a3b8;font-weight:800;">LINK</div>
+                <div style="font-size:12px;margin-top:8px;">{link}</div>
             </div>
             <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
                 <div style="font-size:10px;color:#94a3b8;font-weight:800;">CONDITION</div>
@@ -698,17 +739,79 @@ def popup_html(spot: dict[str, Any]) -> str:
                 <div style="font-size:12px;color:#cbd5e1;font-weight:750;">{escape(spot["time_band"])}</div>
             </div>
         </div>
-        <div style="font-size:12px;line-height:1.55;color:#cbd5e1;border-top:1px solid rgba(148,163,184,.18);padding-top:9px;">{escape(spot.get("memo") or spot.get("mood") or "메모 없음")}</div>
+        <div style="font-size:12px;line-height:1.55;color:#cbd5e1;border-top:1px solid rgba(148,163,184,.18);padding-top:9px;">{escape(spot.get("mood") or spot.get("camera") or "상세 정보 없음")}</div>
     </div>
+    """
+
+
+def add_direction_vector(fmap: folium.Map, spot: dict[str, Any]) -> None:
+    color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+    end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
+    folium.PolyLine(
+        locations=[(spot["lat"], spot["lng"]), (end_lat, end_lng)],
+        color=color,
+        weight=4,
+        opacity=0.92,
+        dash_array="10, 8",
+    ).add_to(fmap)
+    folium.CircleMarker(
+        location=(end_lat, end_lng),
+        radius=4,
+        color=color,
+        weight=2,
+        fill=True,
+        fill_color=color,
+        fill_opacity=0.95,
+    ).add_to(fmap)
+
+
+def marker_direction_script(fmap: folium.Map, marker_name: str, spot: dict[str, Any]) -> str:
+    color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+    end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
+    return f"""
+    (function() {{
+        var marker = {marker_name};
+        var map = {fmap.get_name()};
+        var start = [{float(spot["lat"]):.8f}, {float(spot["lng"]):.8f}];
+        var end = [{end_lat:.8f}, {end_lng:.8f}];
+        var color = "{color}";
+        marker.on("click", function(event) {{
+            if (event && event.originalEvent) {{
+                L.DomEvent.stopPropagation(event.originalEvent);
+            }}
+            if (window.__pgisDirectionLayer) {{
+                map.removeLayer(window.__pgisDirectionLayer);
+            }}
+            window.__pgisDirectionLayer = L.layerGroup([
+                L.polyline([start, end], {{
+                    color: color,
+                    weight: 4,
+                    opacity: 0.94,
+                    dashArray: "10 8",
+                    interactive: false
+                }}),
+                L.circleMarker(end, {{
+                    radius: 4,
+                    color: color,
+                    weight: 2,
+                    fill: true,
+                    fillColor: color,
+                    fillOpacity: 0.96,
+                    interactive: false
+                }})
+            ]).addTo(map);
+        }});
+    }})();
     """
 
 
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     center = st.session_state.selected_point
+    active_spot = None
     if st.session_state.active_spot_id:
-        active = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
-        if active:
-            center = (active["lat"], active["lng"])
+        active_spot = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
+        if active_spot:
+            center = (active_spot["lat"], active_spot["lng"])
 
     fmap = folium.Map(
         location=center,
@@ -765,7 +868,9 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     for spot in spots:
         color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
         active = spot["id"] == st.session_state.active_spot_id
-        folium.CircleMarker(
+        if active:
+            add_direction_vector(fmap, spot)
+        marker = folium.CircleMarker(
             location=(spot["lat"], spot["lng"]),
             radius=6 if active else 4,
             color=color,
@@ -775,7 +880,9 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             fill_opacity=0.92 if active else 0.72,
             tooltip=f"{spot['id']} · {spot['title']}",
             popup=folium.Popup(popup_html(spot), max_width=320),
+            bubbling_mouse_events=False,
         ).add_to(fmap)
+        fmap.get_root().script.add_child(folium.Element(marker_direction_script(fmap, marker.get_name(), spot)))
 
     legend_items = "".join(
         f"""
@@ -868,7 +975,7 @@ def stats(spots: list[dict[str, Any]]) -> tuple[str, str, str, str]:
         weather = "-"
         time_band = "-"
     active = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
-    direction = f"{int(active['direction'])}° {compass_label(active['direction'])}" if active else "-"
+    direction = compass_label(active["direction"]) if active else "-"
     return total, visible, f"{weather} · {time_band}", direction
 
 
@@ -912,13 +1019,15 @@ def render_sidebar(spots: list[dict[str, Any]]) -> None:
             if st.button(label, key=f"select_spot_{spot['id']}", use_container_width=True):
                 st.session_state.active_spot_id = spot["id"]
                 st.session_state.selected_point = (spot["lat"], spot["lng"])
+                st.session_state.form_lat = spot["lat"]
+                st.session_state.form_lng = spot["lng"]
                 st.rerun()
             st.markdown(
                 f"""
                 <div class="pill-row" style="margin-top:-.45rem;margin-bottom:.6rem;">
                     <span class="pill" style="border-color:{color};">{escape(spot["weather"])}</span>
                     <span class="pill">{escape(spot["time_band"])}</span>
-                    <span class="pill">{int(spot["direction"])}° {compass_label(spot["direction"])}</span>
+                    <span class="pill">{compass_label(spot["direction"])}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -983,10 +1092,11 @@ def add_spot(
     st.session_state.spots.append(spot)
     st.session_state.active_spot_id = next_id
     st.session_state.selected_point = (spot["lat"], spot["lng"])
+    st.session_state.form_lat = spot["lat"]
+    st.session_state.form_lng = spot["lng"]
 
 
 def render_form() -> None:
-    selected_lat, selected_lng = st.session_state.selected_point
     st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
     st.markdown("### 스팟 기록")
 
@@ -994,16 +1104,15 @@ def render_form() -> None:
         title = st.text_input("스팟명", placeholder="예: 유리창 노을 반사 포인트")
         col_lat, col_lng = st.columns(2)
         with col_lat:
-            lat = st.number_input("위도", value=float(selected_lat), format="%.6f")
+            lat = st.number_input("위도", format="%.6f", key="form_lat")
         with col_lng:
-            lng = st.number_input("경도", value=float(selected_lng), format="%.6f")
+            lng = st.number_input("경도", format="%.6f", key="form_lng")
 
         direction = st.slider("촬영 방향", min_value=0, max_value=359, value=45, step=1)
         st.markdown(
             f"""
             <div class="pill-row">
-                <span class="pill">방위 {compass_label(direction)}</span>
-                <span class="pill">{direction}°</span>
+                <span class="pill">VECTOR {compass_label(direction)}</span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1022,12 +1131,14 @@ def render_form() -> None:
             camera = st.text_input("렌즈/구도", placeholder="예: 35mm low angle")
 
         uploaded_file = st.file_uploader("사진", type=["jpg", "jpeg", "png", "webp"])
-        memo = st.text_area("메모", placeholder="빛 방향, 프레임, 대기 시간")
+        memo = st.text_input("링크", placeholder="https://example.com")
         submitted = st.form_submit_button("마커 생성", type="primary", use_container_width=True)
 
     if submitted:
         if not title.strip():
             st.error("스팟명을 입력해주세요.")
+        elif memo.strip() and not is_valid_link(memo):
+            st.error("링크는 http:// 또는 https:// 형식으로 입력해주세요.")
         else:
             add_spot(title, lat, lng, direction, weather, time_band, mood, camera, memo, uploaded_file)
             st.success("스팟이 지도에 추가됐습니다.")
@@ -1049,12 +1160,13 @@ def render_active_detail() -> None:
         st.image(uri, use_container_width=True)
 
     color = WEATHER_COLORS.get(active["weather"], "#38bdf8")
+    link = link_html(active.get("memo"))
     st.markdown(
         f"""
         <div class="spot-card">
             <div class="spot-title">
                 <span>{escape(active["title"])}</span>
-                <span style="color:{color};">{int(active["direction"])}°</span>
+                <span style="color:{color};">{compass_label(active["direction"])}</span>
             </div>
             <div class="pill-row">
                 <span class="pill" style="border-color:{color};">{escape(active["weather"])}</span>
@@ -1062,7 +1174,7 @@ def render_active_detail() -> None:
                 <span class="pill">{compass_label(active["direction"])}</span>
                 <span class="pill">{escape(active.get("camera") or "camera -")}</span>
             </div>
-            <p class="muted" style="margin-bottom:0;">{escape(active.get("memo") or active.get("mood") or "메모 없음")}</p>
+            <p class="muted" style="margin-bottom:0;">{escape(active.get("mood") or "상세 정보 없음")} · {link}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1073,6 +1185,8 @@ def render_active_detail() -> None:
     with col_focus:
         if st.button("좌표 사용", use_container_width=True):
             st.session_state.selected_point = (active["lat"], active["lng"])
+            st.session_state.form_lat = active["lat"]
+            st.session_state.form_lng = active["lng"]
             st.rerun()
     with col_delete:
         if st.button("삭제", use_container_width=True):
@@ -1086,20 +1200,14 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
     if not map_data:
         return
 
-    tooltip = map_data.get("last_object_clicked_tooltip")
-    if tooltip:
-        try:
-            spot_id = int(str(tooltip).split(" · ")[0])
-            if any(spot["id"] == spot_id for spot in st.session_state.spots):
-                st.session_state.active_spot_id = spot_id
-        except ValueError:
-            pass
-
     clicked = map_data.get("last_clicked")
     if clicked and "lat" in clicked and "lng" in clicked:
         lat = round(float(clicked["lat"]), 6)
         lng = round(float(clicked["lng"]), 6)
         st.session_state.selected_point = (lat, lng)
+        st.session_state.form_lat = lat
+        st.session_state.form_lng = lng
+        st.session_state.active_spot_id = None
 
 
 def render_map(spots: list[dict[str, Any]]) -> None:
@@ -1109,7 +1217,7 @@ def render_map(spots: list[dict[str, Any]]) -> None:
         fmap,
         height=1200,
         use_container_width=True,
-        returned_objects=["last_clicked", "last_object_clicked_tooltip"],
+        returned_objects=["last_clicked"],
         key="photo_spot_map",
     )
     st.markdown("</div>", unsafe_allow_html=True)
