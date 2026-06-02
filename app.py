@@ -5,7 +5,6 @@ import base64
 import csv
 import html
 import io
-import math
 import os
 import sys
 from datetime import datetime
@@ -45,7 +44,6 @@ if not _inside_streamlit() and os.environ.get("PGIS_STREAMLIT_BOOTSTRAPPED") != 
 
 
 import folium
-from folium.features import DivIcon
 from PIL import Image
 from streamlit_folium import st_folium
 
@@ -141,12 +139,18 @@ def inject_css() -> None:
             --glass-rose: #fb7185;
             --glass-amber: #f59e0b;
             --glass-green: #34d399;
-            --drawer-width: min(410px, calc(100vw - 58px));
-            --drawer-handle: 38px;
+            --drawer-width: min(420px, calc(100vw - 62px));
+            --drawer-handle: 46px;
             --left-drawer-x: calc(-100% - 1px);
             --right-drawer-x: calc(100% + 1px);
             --left-handle-left: 0px;
             --right-handle-right: 0px;
+            --panel-black: rgba(2, 6, 15, 0.94);
+            --panel-line: rgba(148, 163, 184, 0.26);
+            --neon-cyan: #22d3ee;
+            --neon-blue: #38bdf8;
+            --neon-pink: #fb7185;
+            --neon-violet: #a78bfa;
         }
 
         html, body, [data-testid="stAppViewContainer"], .stApp {
@@ -203,12 +207,13 @@ def inject_css() -> None:
             max-width: var(--drawer-width) !important;
             height: 100vh;
             background:
-                linear-gradient(128deg, rgba(34, 211, 238, 0.10), transparent 22% 54%, rgba(251, 113, 133, 0.10)),
-                rgba(2, 5, 12, 0.94);
-            border-right: 1px solid rgba(226, 232, 240, 0.22);
-            box-shadow: 22px 0 65px rgba(0, 0, 0, 0.58);
+                linear-gradient(128deg, rgba(34, 211, 238, 0.14), transparent 18% 52%, rgba(167, 139, 250, 0.11)),
+                repeating-linear-gradient(135deg, transparent 0 18px, rgba(148, 163, 184, 0.045) 18px 19px),
+                var(--panel-black);
+            border-right: 1px solid var(--panel-line);
+            box-shadow: 22px 0 74px rgba(0, 0, 0, 0.66), inset -1px 0 rgba(34, 211, 238, 0.28);
             transform: translateX(var(--left-drawer-x));
-            transition: transform 180ms ease, box-shadow 180ms ease;
+            transition: transform 220ms cubic-bezier(.2, .8, .2, 1), box-shadow 220ms ease;
             z-index: 40;
         }
 
@@ -384,38 +389,28 @@ def inject_css() -> None:
             z-index: 1;
         }
 
-        div[data-testid="stHorizontalBlock"]:has(.map-wrap) {
-            gap: 0 !important;
-            min-height: 100vh;
-        }
-
-        div[data-testid="stHorizontalBlock"]:has(.map-wrap) > div[data-testid="column"]:first-child {
-            width: 100vw !important;
-            flex: 1 1 100vw !important;
-            min-width: 100vw !important;
-        }
-
-        div[data-testid="stHorizontalBlock"]:has(.map-wrap) > div[data-testid="column"]:nth-child(2) {
+        .st-key-right_drawer_panel {
             position: fixed;
             inset: 0 0 0 auto;
             width: var(--drawer-width) !important;
             min-width: var(--drawer-width) !important;
             max-width: var(--drawer-width) !important;
             height: 100vh;
-            padding: 1rem 1rem 1.25rem calc(var(--drawer-handle) + 0.9rem);
+            padding: 1rem;
             overflow-y: auto;
             overflow-x: hidden;
             background:
-                linear-gradient(232deg, rgba(251, 113, 133, 0.10), transparent 24% 56%, rgba(34, 211, 238, 0.10)),
-                rgba(2, 5, 12, 0.94);
-            border-left: 1px solid rgba(226, 232, 240, 0.22);
-            box-shadow: -22px 0 65px rgba(0, 0, 0, 0.58);
+                linear-gradient(232deg, rgba(251, 113, 133, 0.13), transparent 20% 55%, rgba(34, 211, 238, 0.12)),
+                repeating-linear-gradient(45deg, transparent 0 18px, rgba(148, 163, 184, 0.045) 18px 19px),
+                var(--panel-black);
+            border-left: 1px solid var(--panel-line);
+            box-shadow: -22px 0 74px rgba(0, 0, 0, 0.66), inset 1px 0 rgba(251, 113, 133, 0.28);
             transform: translateX(var(--right-drawer-x));
-            transition: transform 180ms ease, box-shadow 180ms ease;
+            transition: transform 220ms cubic-bezier(.2, .8, .2, 1), box-shadow 220ms ease;
             z-index: 35;
         }
 
-        div[data-testid="stHorizontalBlock"]:has(.map-wrap) > div[data-testid="column"]:nth-child(2)::before {
+        .st-key-right_drawer_panel::before {
             content: "";
             position: absolute;
             top: 0;
@@ -427,7 +422,7 @@ def inject_css() -> None:
             opacity: 0.82;
         }
 
-        div[data-testid="stHorizontalBlock"]:has(.map-wrap) > div[data-testid="column"]:nth-child(2) .glass-panel {
+        .st-key-right_drawer_panel .glass-panel {
             margin-bottom: 0.8rem;
         }
 
@@ -440,6 +435,7 @@ def inject_css() -> None:
             min-width: var(--drawer-handle) !important;
             transform: translateY(-50%);
             z-index: 70;
+            filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.52));
         }
 
         .drawer-handle-left,
@@ -457,20 +453,35 @@ def inject_css() -> None:
         .st-key-right_drawer_handle button {
             width: var(--drawer-handle) !important;
             min-width: var(--drawer-handle) !important;
-            height: 132px;
+            height: 148px;
             padding: 0 !important;
             border-radius: 0 !important;
             writing-mode: vertical-rl;
             text-orientation: mixed;
             letter-spacing: 0 !important;
-            font-size: 0.78rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.72rem;
             font-weight: 900;
             color: #f8fafc !important;
+            clip-path: polygon(0 8px, 100% 0, 100% calc(100% - 8px), 0 100%);
             background:
-                linear-gradient(180deg, rgba(34, 211, 238, 0.22), transparent 34% 66%, rgba(251, 113, 133, 0.20)),
-                rgba(3, 7, 18, 0.94) !important;
-            border: 1px solid rgba(226, 232, 240, 0.30) !important;
-            box-shadow: 0 16px 42px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255,255,255,0.04);
+                linear-gradient(180deg, rgba(34, 211, 238, 0.30), transparent 36% 64%, rgba(251, 113, 133, 0.26)),
+                linear-gradient(90deg, rgba(255,255,255,0.06), transparent),
+                rgba(2, 6, 15, 0.96) !important;
+            border: 1px solid rgba(226, 232, 240, 0.34) !important;
+            box-shadow:
+                0 0 0 1px rgba(34, 211, 238, 0.16),
+                0 18px 44px rgba(0, 0, 0, 0.52),
+                inset 0 0 24px rgba(34, 211, 238, 0.10);
+        }
+
+        .st-key-left_drawer_handle button {
+            border-left: 3px solid var(--neon-cyan) !important;
+        }
+
+        .st-key-right_drawer_handle button {
+            border-right: 3px solid var(--neon-pink) !important;
+            clip-path: polygon(0 0, 100% 8px, 100% 100%, 0 calc(100% - 8px));
         }
 
         .drawer-handle button:hover,
@@ -479,7 +490,8 @@ def inject_css() -> None:
             border-color: rgba(34, 211, 238, 0.86) !important;
             color: #ffffff !important;
             background:
-                linear-gradient(180deg, rgba(34, 211, 238, 0.30), transparent 34% 66%, rgba(251, 113, 133, 0.28)),
+                linear-gradient(180deg, rgba(34, 211, 238, 0.40), transparent 36% 64%, rgba(251, 113, 133, 0.36)),
+                linear-gradient(90deg, rgba(255,255,255,0.08), transparent),
                 rgba(2, 6, 14, 0.98) !important;
         }
 
@@ -494,6 +506,20 @@ def inject_css() -> None:
                 rgba(3, 7, 18, 0.86);
             color: #f8fafc;
             min-height: 42px;
+        }
+
+        [data-testid="stSidebar"] h3,
+        .st-key-right_drawer_panel h3 {
+            color: #f8fafc;
+            font-weight: 900;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+            padding-bottom: 0.45rem;
+        }
+
+        [data-testid="stSidebar"] label,
+        .st-key-right_drawer_panel label {
+            color: #cbd5e1 !important;
+            font-weight: 750;
         }
 
         .stButton > button:hover,
@@ -512,6 +538,15 @@ def inject_css() -> None:
 
         input, textarea, [data-baseweb="select"] > div {
             border-radius: 0 !important;
+            background: rgba(2, 6, 17, 0.78) !important;
+            border-color: rgba(148, 163, 184, 0.24) !important;
+            color: #f8fafc !important;
+            box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.04) !important;
+        }
+
+        input:focus, textarea:focus {
+            border-color: rgba(34, 211, 238, 0.72) !important;
+            box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.28) !important;
         }
 
         div[data-testid="stFileUploaderDropzone"] {
@@ -522,15 +557,29 @@ def inject_css() -> None:
 
         .leaflet-popup-content-wrapper,
         .leaflet-popup-tip {
-            background: rgba(8, 13, 24, 0.96);
+            background:
+                linear-gradient(135deg, rgba(34, 211, 238, 0.10), transparent 38% 62%, rgba(251, 113, 133, 0.10)),
+                rgba(2, 6, 17, 0.98);
             color: #f8fafc;
-            border: 1px solid rgba(226, 232, 240, 0.16);
-            box-shadow: 0 18px 42px rgba(0, 0, 0, 0.44);
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            box-shadow: 0 24px 56px rgba(0, 0, 0, 0.56), inset 0 0 0 1px rgba(255,255,255,0.04);
             border-radius: 0;
         }
 
         .leaflet-popup-content {
             margin: 12px;
+        }
+
+        .leaflet-popup-close-button {
+            color: #e2e8f0 !important;
+            font-size: 20px !important;
+            font-weight: 900 !important;
+            text-shadow: 0 0 14px rgba(34, 211, 238, 0.66);
+        }
+
+        .leaflet-popup-close-button:hover {
+            color: #ffffff !important;
+            background: transparent !important;
         }
 
         @media (max-width: 900px) {
@@ -598,24 +647,6 @@ def compass_label(degrees: int | float) -> str:
     return labels[idx]
 
 
-def destination_point(lat: float, lng: float, bearing: float, distance_m: float = 260) -> tuple[float, float]:
-    radius = 6_371_000
-    bearing_rad = math.radians(bearing)
-    lat_rad = math.radians(lat)
-    lng_rad = math.radians(lng)
-    angular_distance = distance_m / radius
-
-    end_lat = math.asin(
-        math.sin(lat_rad) * math.cos(angular_distance)
-        + math.cos(lat_rad) * math.sin(angular_distance) * math.cos(bearing_rad)
-    )
-    end_lng = lng_rad + math.atan2(
-        math.sin(bearing_rad) * math.sin(angular_distance) * math.cos(lat_rad),
-        math.cos(angular_distance) - math.sin(lat_rad) * math.sin(end_lat),
-    )
-    return math.degrees(end_lat), math.degrees(end_lng)
-
-
 def compress_photo(uploaded_file: Any) -> tuple[bytes, str]:
     raw = uploaded_file.getvalue()
     mime = uploaded_file.type or "image/jpeg"
@@ -638,45 +669,6 @@ def data_uri(photo_bytes: bytes | None, mime: str | None) -> str | None:
     return f"data:{mime or 'image/jpeg'};base64,{encoded}"
 
 
-def marker_icon(spot: dict[str, Any]) -> DivIcon:
-    color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
-    direction = int(spot["direction"])
-    marker_html = f"""
-    <div style="
-        width: 34px;
-        height: 34px;
-        position: relative;
-        transform: rotate({direction}deg);
-        border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, 0.78);
-        background: radial-gradient(circle at 50% 58%, rgba(8, 13, 24, 0.92), rgba(8, 13, 24, 0.42));
-        box-shadow: 0 0 22px {color}, 0 0 0 3px rgba(255, 255, 255, 0.08);
-    ">
-        <div style="
-            position: absolute;
-            left: 11px;
-            top: 3px;
-            width: 0;
-            height: 0;
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-bottom: 15px solid {color};
-            filter: drop-shadow(0 0 5px {color});
-        "></div>
-        <div style="
-            position: absolute;
-            left: 14px;
-            top: 18px;
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #ffffff;
-        "></div>
-    </div>
-    """
-    return DivIcon(html=marker_html, icon_size=(34, 34), icon_anchor=(17, 17), class_name="glass-marker")
-
-
 def popup_html(spot: dict[str, Any]) -> str:
     color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
     img = data_uri(spot.get("photo_bytes"), spot.get("photo_mime"))
@@ -684,18 +676,29 @@ def popup_html(spot: dict[str, Any]) -> str:
     if img:
         image_html = (
             f'<img src="{img}" style="width:100%;max-height:150px;object-fit:cover;'
-            'border-radius:8px;margin-bottom:10px;border:1px solid rgba(226,232,240,0.18);" />'
+            'margin-bottom:10px;border:1px solid rgba(148,163,184,0.24);" />'
         )
+    direction = int(spot["direction"])
     return f"""
-    <div style="width:260px;font-family:Inter,Arial,sans-serif;color:#f8fafc;">
+    <div style="width:282px;font-family:Inter,Arial,sans-serif;color:#f8fafc;background:#020611;">
         {image_html}
-        <div style="font-size:15px;font-weight:800;margin-bottom:6px;">{escape(spot["title"])}</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-            <span style="border:1px solid rgba(226,232,240,.18);border-radius:999px;padding:3px 8px;background:rgba(15,23,42,.8);">{escape(spot["weather"])}</span>
-            <span style="border:1px solid rgba(226,232,240,.18);border-radius:999px;padding:3px 8px;background:rgba(15,23,42,.8);">{escape(spot["time_band"])}</span>
-            <span style="border:1px solid {color};border-radius:999px;padding:3px 8px;background:rgba(15,23,42,.8);">{int(spot["direction"])}° {compass_label(spot["direction"])}</span>
+        <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
+            <div style="font-size:12px;color:#94a3b8;font-weight:800;text-transform:uppercase;">SPOT VECTOR</div>
+            <div style="font-size:16px;font-weight:900;line-height:1.25;color:#ffffff;">{escape(spot["title"])}</div>
         </div>
-        <div style="font-size:12px;line-height:1.5;color:#cbd5e1;">{escape(spot.get("memo"))}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+            <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
+                <div style="font-size:10px;color:#94a3b8;font-weight:800;">DIRECTION</div>
+                <div style="font-size:22px;font-weight:950;color:{color};line-height:1.1;">{direction}°</div>
+                <div style="font-size:12px;color:#e2e8f0;font-weight:800;">{compass_label(direction)}</div>
+            </div>
+            <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
+                <div style="font-size:10px;color:#94a3b8;font-weight:800;">CONDITION</div>
+                <div style="font-size:12px;color:#f8fafc;font-weight:850;margin-top:4px;">{escape(spot["weather"])}</div>
+                <div style="font-size:12px;color:#cbd5e1;font-weight:750;">{escape(spot["time_band"])}</div>
+            </div>
+        </div>
+        <div style="font-size:12px;line-height:1.55;color:#cbd5e1;border-top:1px solid rgba(148,163,184,.18);padding-top:9px;">{escape(spot.get("memo") or spot.get("mood") or "메모 없음")}</div>
     </div>
     """
 
@@ -750,39 +753,28 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     lat, lng = st.session_state.selected_point
     folium.CircleMarker(
         location=(lat, lng),
-        radius=8,
+        radius=4,
         color="#22d3ee",
         fill=True,
         fill_color="#22d3ee",
-        fill_opacity=0.82,
-        weight=2,
+        fill_opacity=0.66,
+        weight=1,
         tooltip="선택 지점",
     ).add_to(fmap)
 
     for spot in spots:
         color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
-        end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
-        folium.PolyLine(
-            locations=[(spot["lat"], spot["lng"]), (end_lat, end_lng)],
-            color=color,
-            weight=3,
-            opacity=0.78,
-            dash_array="6, 8",
-        ).add_to(fmap)
+        active = spot["id"] == st.session_state.active_spot_id
         folium.CircleMarker(
             location=(spot["lat"], spot["lng"]),
-            radius=12,
+            radius=6 if active else 4,
             color=color,
-            weight=1,
+            weight=2 if active else 1,
             fill=True,
             fill_color=color,
-            fill_opacity=0.18,
-        ).add_to(fmap)
-        folium.Marker(
-            location=(spot["lat"], spot["lng"]),
-            icon=marker_icon(spot),
+            fill_opacity=0.92 if active else 0.72,
             tooltip=f"{spot['id']} · {spot['title']}",
-            popup=folium.Popup(popup_html(spot), max_width=310),
+            popup=folium.Popup(popup_html(spot), max_width=320),
         ).add_to(fmap)
 
     legend_items = "".join(
@@ -801,12 +793,12 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         bottom: 18px;
         z-index: 9999;
         padding: 10px 12px;
-        border-radius: 8px;
-        background: rgba(8, 13, 24, 0.86);
-        border: 1px solid rgba(226, 232, 240, 0.18);
+        border-radius: 0;
+        background: linear-gradient(135deg, rgba(34,211,238,.10), transparent 58%, rgba(251,113,133,.10)), rgba(2, 6, 17, 0.90);
+        border: 1px solid rgba(148, 163, 184, 0.24);
         color: #f8fafc;
         font-size: 12px;
-        box-shadow: 0 14px 34px rgba(0,0,0,.36);
+        box-shadow: 0 18px 42px rgba(0,0,0,.46), inset 0 0 0 1px rgba(255,255,255,.04);
     ">
         <div style="font-weight:800;margin-bottom:5px;">날씨</div>
         {legend_items}
@@ -943,20 +935,16 @@ def render_sidebar(spots: list[dict[str, Any]]) -> None:
 
 
 def render_drawer_handles() -> None:
-    left_label = "닫기" if st.session_state.left_drawer_open else "필터"
-    right_label = "닫기" if st.session_state.right_drawer_open else "기록"
+    left_label = "FILTER"
+    right_label = "LOG"
 
-    st.markdown('<div class="drawer-handle drawer-handle-left">', unsafe_allow_html=True)
     if st.button(left_label, key="left_drawer_handle", help="필터 패널 열기/닫기"):
         st.session_state.left_drawer_open = not st.session_state.left_drawer_open
         st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="drawer-handle drawer-handle-right">', unsafe_allow_html=True)
     if st.button(right_label, key="right_drawer_handle", help="기록 패널 열기/닫기"):
         st.session_state.right_drawer_open = not st.session_state.right_drawer_open
         st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def add_spot(
@@ -1135,10 +1123,8 @@ def main() -> None:
     render_drawer_handles()
     render_sidebar(spots)
 
-    map_col, tool_col = st.columns([1, 0.0001], gap="small")
-    with map_col:
-        render_map(spots)
-    with tool_col:
+    render_map(spots)
+    with st.container(key="right_drawer_panel"):
         render_form()
         render_active_detail()
 
