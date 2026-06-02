@@ -46,6 +46,7 @@ if not _inside_streamlit() and os.environ.get("PGIS_STREAMLIT_BOOTSTRAPPED") != 
 
 
 import folium
+from branca.element import MacroElement, Template
 from PIL import Image
 from streamlit_folium import st_folium
 
@@ -560,11 +561,11 @@ def inject_css() -> None:
         .leaflet-popup-content-wrapper,
         .leaflet-popup-tip {
             background:
-                linear-gradient(135deg, rgba(34, 211, 238, 0.10), transparent 38% 62%, rgba(251, 113, 133, 0.10)),
+                linear-gradient(135deg, rgba(255,255,255,0.08), transparent 24% 72%, rgba(34,211,238,0.08)),
                 rgba(2, 6, 17, 0.98);
             color: #f8fafc;
-            border: 1px solid rgba(148, 163, 184, 0.28);
-            box-shadow: 0 24px 56px rgba(0, 0, 0, 0.56), inset 0 0 0 1px rgba(255,255,255,0.04);
+            border: 1px solid rgba(248, 250, 252, 0.34);
+            box-shadow: 0 24px 56px rgba(0, 0, 0, 0.62), inset 0 0 0 1px rgba(255,255,255,0.08);
             border-radius: 0;
         }
 
@@ -635,6 +636,7 @@ def ensure_state() -> None:
         "right_drawer_open": False,
         "form_lat": SEOUL_CENTER[0],
         "form_lng": SEOUL_CENTER[1],
+        "picking_location": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -765,44 +767,58 @@ def add_direction_vector(fmap: folium.Map, spot: dict[str, Any]) -> None:
     ).add_to(fmap)
 
 
-def marker_direction_script(fmap: folium.Map, marker_name: str, spot: dict[str, Any]) -> str:
-    color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
-    end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
-    return f"""
-    (function() {{
-        var marker = {marker_name};
-        var map = {fmap.get_name()};
-        var start = [{float(spot["lat"]):.8f}, {float(spot["lng"]):.8f}];
-        var end = [{end_lat:.8f}, {end_lng:.8f}];
-        var color = "{color}";
-        marker.on("click", function(event) {{
-            if (event && event.originalEvent) {{
-                L.DomEvent.stopPropagation(event.originalEvent);
-            }}
-            if (window.__pgisDirectionLayer) {{
-                map.removeLayer(window.__pgisDirectionLayer);
-            }}
-            window.__pgisDirectionLayer = L.layerGroup([
-                L.polyline([start, end], {{
-                    color: color,
-                    weight: 4,
-                    opacity: 0.94,
-                    dashArray: "10 8",
-                    interactive: false
-                }}),
-                L.circleMarker(end, {{
-                    radius: 4,
-                    color: color,
-                    weight: 2,
-                    fill: true,
-                    fillColor: color,
-                    fillOpacity: 0.96,
-                    interactive: false
-                }})
-            ]).addTo(map);
-        }});
-    }})();
-    """
+class DirectionClickScript(MacroElement):
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function() {
+            var marker = {{ this.marker_name }};
+            var map = {{ this.map_name }};
+            var start = [{{ this.start_lat }}, {{ this.start_lng }}];
+            var end = [{{ this.end_lat }}, {{ this.end_lng }}];
+            var color = "{{ this.color }}";
+            marker.on("click", function(event) {
+                if (event && event.originalEvent) {
+                    L.DomEvent.stopPropagation(event.originalEvent);
+                }
+                if (window.__pgisDirectionLayer) {
+                    map.removeLayer(window.__pgisDirectionLayer);
+                }
+                window.__pgisDirectionLayer = L.layerGroup([
+                    L.polyline([start, end], {
+                        color: color,
+                        weight: 4,
+                        opacity: 0.94,
+                        dashArray: "10 8",
+                        interactive: false
+                    }),
+                    L.circleMarker(end, {
+                        radius: 4,
+                        color: color,
+                        weight: 2,
+                        fill: true,
+                        fillColor: color,
+                        fillOpacity: 0.96,
+                        interactive: false
+                    })
+                ]).addTo(map);
+            });
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(self, fmap: folium.Map, marker_name: str, spot: dict[str, Any]) -> None:
+        super().__init__()
+        self._name = "DirectionClickScript"
+        end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
+        self.map_name = fmap.get_name()
+        self.marker_name = marker_name
+        self.start_lat = f"{float(spot['lat']):.8f}"
+        self.start_lng = f"{float(spot['lng']):.8f}"
+        self.end_lat = f"{end_lat:.8f}"
+        self.end_lng = f"{end_lng:.8f}"
+        self.color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
 
 
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
@@ -848,6 +864,30 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             .leaflet-container {
                 background: #060811;
             }
+            .leaflet-popup-content-wrapper,
+            .leaflet-popup-tip {
+                background:
+                    linear-gradient(135deg, rgba(255,255,255,0.08), transparent 24% 72%, rgba(34,211,238,0.08)),
+                    rgba(2, 6, 17, 0.98) !important;
+                color: #f8fafc !important;
+                border: 1px solid rgba(248, 250, 252, 0.34);
+                border-radius: 0 !important;
+                box-shadow:
+                    0 22px 58px rgba(0, 0, 0, 0.62),
+                    inset 0 0 0 1px rgba(255,255,255,0.08);
+            }
+            .leaflet-popup-content {
+                margin: 12px !important;
+            }
+            .leaflet-popup-close-button {
+                color: #f8fafc !important;
+                font-weight: 900 !important;
+                text-shadow: 0 0 12px rgba(255,255,255,0.45);
+            }
+            .leaflet-popup-close-button:hover {
+                background: transparent !important;
+                color: #ffffff !important;
+            }
             </style>
             """
         )
@@ -882,7 +922,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             popup=folium.Popup(popup_html(spot), max_width=320),
             bubbling_mouse_events=False,
         ).add_to(fmap)
-        fmap.get_root().script.add_child(folium.Element(marker_direction_script(fmap, marker.get_name(), spot)))
+        DirectionClickScript(fmap, marker.get_name(), spot).add_to(fmap)
 
     legend_items = "".join(
         f"""
@@ -1052,7 +1092,10 @@ def render_drawer_handles() -> None:
         st.rerun()
 
     if st.button(right_label, key="right_drawer_handle", help="기록 패널 열기/닫기"):
-        st.session_state.right_drawer_open = not st.session_state.right_drawer_open
+        next_open = not st.session_state.right_drawer_open
+        st.session_state.right_drawer_open = next_open
+        if not next_open:
+            st.session_state.picking_location = False
         st.rerun()
 
 
@@ -1099,14 +1142,30 @@ def add_spot(
 def render_form() -> None:
     st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
     st.markdown("### 스팟 기록")
+    lat = float(st.session_state.form_lat)
+    lng = float(st.session_state.form_lng)
+    coord_label = f"{lat:.6f}, {lng:.6f}"
+    st.markdown(
+        f"""
+        <div class="spot-card">
+            <div class="spot-title">
+                <span>기록 좌표</span>
+                <span style="color:#67e8f9;">{escape(coord_label)}</span>
+            </div>
+            <p class="muted" style="margin:.45rem 0 0;">
+                {"지도에서 기록할 위치를 클릭하세요." if st.session_state.picking_location else "위치 선택 버튼을 누른 뒤 지도에서 지점을 클릭하세요."}
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("선택 취소" if st.session_state.picking_location else "위치 선택", key="pick_location_button", use_container_width=True):
+        st.session_state.picking_location = not st.session_state.picking_location
+        st.session_state.right_drawer_open = True
+        st.rerun()
 
     with st.form("spot_form", clear_on_submit=True):
         title = st.text_input("스팟명", placeholder="예: 유리창 노을 반사 포인트")
-        col_lat, col_lng = st.columns(2)
-        with col_lat:
-            lat = st.number_input("위도", format="%.6f", key="form_lat")
-        with col_lng:
-            lng = st.number_input("경도", format="%.6f", key="form_lng")
 
         direction = st.slider("촬영 방향", min_value=0, max_value=359, value=45, step=1)
         st.markdown(
@@ -1199,6 +1258,8 @@ def render_active_detail() -> None:
 def handle_map_return(map_data: dict[str, Any] | None) -> None:
     if not map_data:
         return
+    if not (st.session_state.right_drawer_open and st.session_state.picking_location):
+        return
 
     clicked = map_data.get("last_clicked")
     if clicked and "lat" in clicked and "lng" in clicked:
@@ -1208,17 +1269,19 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         st.session_state.form_lat = lat
         st.session_state.form_lng = lng
         st.session_state.active_spot_id = None
+        st.session_state.picking_location = False
 
 
 def render_map(spots: list[dict[str, Any]]) -> None:
     st.markdown('<div class="map-wrap">', unsafe_allow_html=True)
     fmap = build_map(spots)
+    pick_active = bool(st.session_state.right_drawer_open and st.session_state.picking_location)
     map_data = st_folium(
         fmap,
         height=1200,
         use_container_width=True,
-        returned_objects=["last_clicked"],
-        key="photo_spot_map",
+        returned_objects=["last_clicked"] if pick_active else [],
+        key="photo_spot_map_pick" if pick_active else "photo_spot_map_view",
     )
     st.markdown("</div>", unsafe_allow_html=True)
     handle_map_return(map_data)
