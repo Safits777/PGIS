@@ -55,7 +55,7 @@ st.set_page_config(
     page_title="GlassShot PGIS",
     page_icon="📷",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -429,6 +429,61 @@ def inject_css() -> None:
             margin-bottom: 0.8rem;
         }
 
+        .st-key-filter_floating_panel {
+            position: fixed;
+            left: 18px;
+            bottom: 18px;
+            width: min(360px, calc(100vw - 36px)) !important;
+            max-height: min(70vh, 640px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            z-index: 46;
+            padding: 0.78rem;
+            background:
+                linear-gradient(132deg, rgba(34, 211, 238, 0.16), transparent 22% 58%, rgba(251, 113, 133, 0.12)),
+                repeating-linear-gradient(135deg, transparent 0 16px, rgba(248, 250, 252, 0.045) 16px 17px),
+                rgba(2, 6, 15, 0.92);
+            border: 1px solid rgba(248, 250, 252, 0.24);
+            box-shadow:
+                0 20px 56px rgba(0, 0, 0, 0.58),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.045),
+                inset 4px 0 rgba(34, 211, 238, 0.42);
+            backdrop-filter: blur(18px) saturate(1.18);
+        }
+
+        .filter-head {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.65rem;
+            align-items: center;
+            margin-bottom: 0.65rem;
+        }
+
+        .filter-count {
+            min-width: 68px;
+            padding: 0.52rem 0.58rem;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            background: rgba(3, 7, 18, 0.78);
+            color: #e2e8f0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.78rem;
+            font-weight: 900;
+            text-align: center;
+        }
+
+        .filter-mini {
+            border-top: 1px solid rgba(148, 163, 184, 0.18);
+            padding-top: 0.62rem;
+            color: #cbd5e1;
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        .filter-mini strong {
+            color: #f8fafc;
+            font-weight: 900;
+        }
+
         .drawer-handle,
         .st-key-left_drawer_handle,
         .st-key-right_drawer_handle {
@@ -601,11 +656,37 @@ def inject_css() -> None:
             .hero-title {
                 font-size: 2.2rem;
             }
+            .st-key-filter_floating_panel {
+                left: 10px;
+                right: 10px;
+                bottom: 10px;
+                width: auto !important;
+                max-height: 56vh;
+                padding: 0.68rem;
+            }
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
+    left_open = bool(st.session_state.get("left_drawer_open", False))
+    right_open = bool(st.session_state.get("right_drawer_open", False))
+    st.markdown(
+        f"""
+        <style>
+        :root {{
+            --left-drawer-x: {"0" if left_open else "calc(-100% - 1px)"};
+            --right-drawer-x: {"0" if right_open else "calc(100% + 1px)"};
+            --left-handle-left: {"var(--drawer-width)" if left_open else "0px"};
+            --right-handle-right: {"var(--drawer-width)" if right_open else "0px"};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def inject_layout_vars() -> None:
     left_open = bool(st.session_state.get("left_drawer_open", False))
     right_open = bool(st.session_state.get("right_drawer_open", False))
     st.markdown(
@@ -637,6 +718,8 @@ def ensure_state() -> None:
         "form_lat": SEOUL_CENTER[0],
         "form_lng": SEOUL_CENTER[1],
         "picking_location": False,
+        "filter_open": False,
+        "last_context_click_nonce": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -749,6 +832,25 @@ def popup_html(spot: dict[str, Any]) -> str:
 def add_direction_vector(fmap: folium.Map, spot: dict[str, Any]) -> None:
     color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
     end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
+    folium.CircleMarker(
+        location=(spot["lat"], spot["lng"]),
+        radius=10,
+        color="#f8fafc",
+        weight=2,
+        fill=True,
+        fill_color=color,
+        fill_opacity=0.52,
+        opacity=0.92,
+    ).add_to(fmap)
+    folium.CircleMarker(
+        location=(spot["lat"], spot["lng"]),
+        radius=4,
+        color="#020611",
+        weight=1,
+        fill=True,
+        fill_color="#ffffff",
+        fill_opacity=0.95,
+    ).add_to(fmap)
     folium.PolyLine(
         locations=[(spot["lat"], spot["lng"]), (end_lat, end_lng)],
         color=color,
@@ -777,14 +879,37 @@ class DirectionClickScript(MacroElement):
             var start = [{{ this.start_lat }}, {{ this.start_lng }}];
             var end = [{{ this.end_lat }}, {{ this.end_lng }}];
             var color = "{{ this.color }}";
+            function clearDirectionLayer() {
+                if (window.__pgisDirectionLayer) {
+                    map.removeLayer(window.__pgisDirectionLayer);
+                    window.__pgisDirectionLayer = null;
+                }
+            }
             marker.on("click", function(event) {
                 if (event && event.originalEvent) {
                     L.DomEvent.stopPropagation(event.originalEvent);
                 }
-                if (window.__pgisDirectionLayer) {
-                    map.removeLayer(window.__pgisDirectionLayer);
-                }
+                clearDirectionLayer();
                 window.__pgisDirectionLayer = L.layerGroup([
+                    L.circleMarker(start, {
+                        radius: 12,
+                        color: "#f8fafc",
+                        weight: 2,
+                        fill: true,
+                        fillColor: color,
+                        fillOpacity: 0.52,
+                        opacity: 0.94,
+                        interactive: false
+                    }),
+                    L.circleMarker(start, {
+                        radius: 4,
+                        color: "#020611",
+                        weight: 1,
+                        fill: true,
+                        fillColor: "#ffffff",
+                        fillOpacity: 0.98,
+                        interactive: false
+                    }),
                     L.polyline([start, end], {
                         color: color,
                         weight: 4,
@@ -803,6 +928,7 @@ class DirectionClickScript(MacroElement):
                     })
                 ]).addTo(map);
             });
+            marker.on("popupclose", clearDirectionLayer);
         })();
         {% endmacro %}
         """
@@ -819,6 +945,54 @@ class DirectionClickScript(MacroElement):
         self.end_lat = f"{end_lat:.8f}"
         self.end_lng = f"{end_lng:.8f}"
         self.color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+
+
+class RightClickSelectScript(MacroElement):
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function() {
+            var map = {{ this.map_name }};
+            map.on("contextmenu", function(event) {
+                if (event && event.originalEvent) {
+                    event.originalEvent.preventDefault();
+                    L.DomEvent.stop(event.originalEvent);
+                }
+                if (window.__pgisDirectionLayer) {
+                    map.removeLayer(window.__pgisDirectionLayer);
+                    window.__pgisDirectionLayer = null;
+                }
+                map.closePopup();
+                var nonce = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
+                var payload = {
+                    _pgis_event: "contextmenu",
+                    _pgis_nonce: nonce,
+                    zoom: map.getZoom(),
+                    last_clicked: {
+                        lat: event.latlng.lat,
+                        lng: event.latlng.lng
+                    }
+                };
+                if (window.Streamlit && window.Streamlit.setComponentValue) {
+                    window.Streamlit.setComponentValue(payload);
+                } else {
+                    window.parent.postMessage({
+                        isStreamlitMessage: true,
+                        type: "streamlit:setComponentValue",
+                        value: payload,
+                        dataType: "json"
+                    }, "*");
+                }
+            });
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(self, fmap: folium.Map) -> None:
+        super().__init__()
+        self._name = "RightClickSelectScript"
+        self.map_name = fmap.get_name()
 
 
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
@@ -892,6 +1066,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             """
         )
     )
+    RightClickSelectScript(fmap).add_to(fmap)
 
     lat, lng = st.session_state.selected_point
     folium.CircleMarker(
@@ -908,8 +1083,6 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     for spot in spots:
         color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
         active = spot["id"] == st.session_state.active_spot_id
-        if active:
-            add_direction_vector(fmap, spot)
         marker = folium.CircleMarker(
             location=(spot["lat"], spot["lng"]),
             radius=6 if active else 4,
@@ -924,35 +1097,13 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         ).add_to(fmap)
         DirectionClickScript(fmap, marker.get_name(), spot).add_to(fmap)
 
-    legend_items = "".join(
-        f"""
-        <div style="display:flex;align-items:center;gap:6px;margin:4px 0;">
-            <span style="width:10px;height:10px;border-radius:50%;background:{color};box-shadow:0 0 10px {color};"></span>
-            <span>{escape(name)}</span>
-        </div>
-        """
-        for name, color in WEATHER_COLORS.items()
-    )
-    legend = f"""
-    <div style="
-        position: fixed;
-        right: 18px;
-        bottom: 18px;
-        z-index: 9999;
-        padding: 10px 12px;
-        border-radius: 0;
-        background: linear-gradient(135deg, rgba(34,211,238,.10), transparent 58%, rgba(251,113,133,.10)), rgba(2, 6, 17, 0.90);
-        border: 1px solid rgba(148, 163, 184, 0.24);
-        color: #f8fafc;
-        font-size: 12px;
-        box-shadow: 0 18px 42px rgba(0,0,0,.46), inset 0 0 0 1px rgba(255,255,255,.04);
-    ">
-        <div style="font-weight:800;margin-bottom:5px;">날씨</div>
-        {legend_items}
-    </div>
-    """
-    fmap.get_root().html.add_child(folium.Element(legend))
     return fmap
+
+    """
+        <div style="font-weight:800;margin-bottom:5px;">날씨</div>
+
+
+    """
 
 
 def filtered_spots() -> list[dict[str, Any]]:
@@ -1083,6 +1234,74 @@ def render_sidebar(spots: list[dict[str, Any]]) -> None:
         )
 
 
+def render_filter_floating(spots: list[dict[str, Any]]) -> None:
+    total = len(st.session_state.spots)
+    visible = len(spots)
+    active = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
+
+    with st.container(key="filter_floating_panel"):
+        st.markdown(
+            f"""
+            <div class="filter-head">
+                <div></div>
+                <div class="filter-count">{visible}/{total}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("FILTER", key="filter_floating_toggle", use_container_width=True):
+            st.session_state.filter_open = not st.session_state.filter_open
+            st.rerun()
+
+        if not st.session_state.filter_open:
+            active_title = escape(active["title"]) if active else "NO ACTIVE SPOT"
+            st.markdown(
+                f"""
+                <div class="filter-mini">
+                    <strong>{active_title}</strong><br />
+                    VIEW {visible} / TOTAL {total}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            return
+
+        st.text_input("Search", key="search_query", placeholder="title, mood, camera, link")
+        st.multiselect("Weather", WEATHER_OPTIONS, key="weather_filter")
+        st.multiselect("Time", TIME_OPTIONS, key="time_filter")
+
+        st.divider()
+        if not spots:
+            st.markdown('<p class="muted">NO MATCHED SPOTS</p>', unsafe_allow_html=True)
+        for spot in spots:
+            color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+            active_mark = "ACTIVE " if spot["id"] == st.session_state.active_spot_id else ""
+            if st.button(f"{active_mark}{spot['title']}", key=f"float_select_spot_{spot['id']}", use_container_width=True):
+                st.session_state.active_spot_id = spot["id"]
+                st.session_state.selected_point = (spot["lat"], spot["lng"])
+                st.session_state.form_lat = spot["lat"]
+                st.session_state.form_lng = spot["lng"]
+                st.rerun()
+            st.markdown(
+                f"""
+                <div class="pill-row" style="margin-top:-.45rem;margin-bottom:.6rem;">
+                    <span class="pill" style="border-color:{color};">{escape(spot["weather"])}</span>
+                    <span class="pill">{escape(spot["time_band"])}</span>
+                    <span class="pill">{compass_label(spot["direction"])}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.download_button(
+            "EXPORT CSV",
+            data=spot_csv(st.session_state.spots),
+            file_name=f"glassshot-pgis-{datetime.now().strftime('%Y%m%d-%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+
 def render_drawer_handles() -> None:
     left_label = "FILTER"
     right_label = "LOG"
@@ -1205,6 +1424,72 @@ def render_form() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_record_form() -> None:
+    st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
+    title_col, close_col = st.columns([1, 0.36])
+    with title_col:
+        st.markdown("### RECORD")
+    with close_col:
+        if st.button("CLOSE", key="close_record_panel", use_container_width=True):
+            st.session_state.right_drawer_open = False
+            st.session_state.picking_location = False
+            st.rerun()
+
+    lat = float(st.session_state.form_lat)
+    lng = float(st.session_state.form_lng)
+    coord_label = f"{lat:.6f}, {lng:.6f}"
+    st.markdown(
+        f"""
+        <div class="spot-card">
+            <div class="spot-title">
+                <span>LOCKED COORD</span>
+                <span style="color:#67e8f9;">{escape(coord_label)}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.form("record_form", clear_on_submit=True):
+        title = st.text_input("Spot name", placeholder="night reflection, rooftop line")
+        direction = st.slider("Direction", min_value=0, max_value=359, value=45, step=1)
+        st.markdown(
+            f"""
+            <div class="pill-row">
+                <span class="pill">VECTOR {compass_label(direction)}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        col_weather, col_time = st.columns(2)
+        with col_weather:
+            weather = st.selectbox("Weather", WEATHER_OPTIONS, index=0)
+        with col_time:
+            time_band = st.selectbox("Time", TIME_OPTIONS, index=3)
+
+        col_mood, col_camera = st.columns(2)
+        with col_mood:
+            mood = st.text_input("Mood", placeholder="reflection, mist, neon")
+        with col_camera:
+            camera = st.text_input("Lens / frame", placeholder="35mm low angle")
+
+        uploaded_file = st.file_uploader("Photo", type=["jpg", "jpeg", "png", "webp"])
+        memo = st.text_input("Link", placeholder="https://example.com")
+        submitted = st.form_submit_button("CREATE MARKER", type="primary", use_container_width=True)
+
+    if submitted:
+        if not title.strip():
+            st.error("Enter a spot name.")
+        elif memo.strip() and not is_valid_link(memo):
+            st.error("Link must start with http:// or https://.")
+        else:
+            add_spot(title, lat, lng, direction, weather, time_band, mood, camera, memo, uploaded_file)
+            st.success("Marker added.")
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def render_active_detail() -> None:
     active = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
     st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
@@ -1258,30 +1543,38 @@ def render_active_detail() -> None:
 def handle_map_return(map_data: dict[str, Any] | None) -> None:
     if not map_data:
         return
-    if not (st.session_state.right_drawer_open and st.session_state.picking_location):
+    if map_data.get("_pgis_event") != "contextmenu":
         return
 
     clicked = map_data.get("last_clicked")
     if clicked and "lat" in clicked and "lng" in clicked:
+        nonce = map_data.get("_pgis_nonce")
+        if nonce and nonce == st.session_state.get("last_context_click_nonce"):
+            return
+        st.session_state.last_context_click_nonce = nonce
         lat = round(float(clicked["lat"]), 6)
         lng = round(float(clicked["lng"]), 6)
         st.session_state.selected_point = (lat, lng)
         st.session_state.form_lat = lat
         st.session_state.form_lng = lng
         st.session_state.active_spot_id = None
+        st.session_state.right_drawer_open = True
         st.session_state.picking_location = False
+        try:
+            st.session_state.map_zoom = int(map_data.get("zoom", st.session_state.map_zoom))
+        except (TypeError, ValueError):
+            pass
 
 
 def render_map(spots: list[dict[str, Any]]) -> None:
     st.markdown('<div class="map-wrap">', unsafe_allow_html=True)
     fmap = build_map(spots)
-    pick_active = bool(st.session_state.right_drawer_open and st.session_state.picking_location)
     map_data = st_folium(
         fmap,
         height=1200,
         use_container_width=True,
-        returned_objects=["last_clicked"] if pick_active else [],
-        key="photo_spot_map_pick" if pick_active else "photo_spot_map_view",
+        returned_objects=[],
+        key="photo_spot_map",
     )
     st.markdown("</div>", unsafe_allow_html=True)
     handle_map_return(map_data)
@@ -1291,13 +1584,14 @@ def main() -> None:
     ensure_state()
     inject_css()
     spots = filtered_spots()
-    render_drawer_handles()
-    render_sidebar(spots)
 
     render_map(spots)
-    with st.container(key="right_drawer_panel"):
-        render_form()
-        render_active_detail()
+    inject_layout_vars()
+    render_filter_floating(spots)
+    if st.session_state.right_drawer_open:
+        with st.container(key="right_drawer_panel"):
+            render_record_form()
+            render_active_detail()
 
 
 if __name__ == "__main__":
