@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --angle: 45deg;
+      --cyan: #22d3ee;
+      --rose: #fb7185;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --bg: rgba(2, 6, 15, 0.96);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 245px;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    .shell {
+      width: min(238px, calc(100vw - 8px));
+      aspect-ratio: 1;
+      position: relative;
+      display: grid;
+      place-items: center;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .dial {
+      position: absolute;
+      inset: 10px;
+      border-radius: 50%;
+      border: 1px solid rgba(248, 250, 252, 0.28);
+      background:
+        radial-gradient(circle at center, rgba(2, 6, 15, 0.96) 0 42%, transparent 43%),
+        conic-gradient(from 0deg, rgba(34, 211, 238, 0.95) 0 var(--angle), rgba(148, 163, 184, 0.20) var(--angle) 360deg),
+        rgba(2, 6, 15, 0.86);
+      box-shadow:
+        0 22px 50px rgba(0, 0, 0, 0.46),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+        inset 0 0 32px rgba(34, 211, 238, 0.08);
+      cursor: crosshair;
+    }
+
+    .dial::before,
+    .dial::after {
+      content: "";
+      position: absolute;
+      inset: 20px;
+      border-radius: 50%;
+      border: 1px solid rgba(248, 250, 252, 0.12);
+      pointer-events: none;
+    }
+
+    .dial::after {
+      inset: 55px;
+      border-color: rgba(34, 211, 238, 0.22);
+    }
+
+    .needle {
+      position: absolute;
+      width: 2px;
+      height: calc(50% - 28px);
+      left: calc(50% - 1px);
+      bottom: 50%;
+      transform-origin: 50% 100%;
+      transform: rotate(var(--angle));
+      background: linear-gradient(180deg, var(--rose), var(--cyan));
+      box-shadow: 0 0 14px rgba(34, 211, 238, 0.68);
+      pointer-events: none;
+    }
+
+    .knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      transform:
+        rotate(var(--angle))
+        translateY(calc(-1 * (min(238px, calc(100vw - 8px)) / 2 - 28px)))
+        rotate(calc(-1 * var(--angle)))
+        translate(-50%, -50%);
+      border: 2px solid #f8fafc;
+      background: var(--cyan);
+      box-shadow: 0 0 18px rgba(34, 211, 238, 0.8), 0 0 0 5px rgba(34, 211, 238, 0.14);
+      pointer-events: none;
+    }
+
+    .center {
+      width: 108px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 4px;
+      border-radius: 50%;
+      border: 1px solid rgba(248, 250, 252, 0.26);
+      background:
+        linear-gradient(135deg, rgba(34, 211, 238, 0.13), transparent 58%, rgba(251, 113, 133, 0.12)),
+        var(--bg);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 27px;
+      line-height: 1;
+      font-weight: 900;
+      color: #ffffff;
+    }
+
+    .compass {
+      font-size: 13px;
+      font-weight: 900;
+      color: var(--cyan);
+    }
+
+    .cardinal {
+      position: absolute;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      pointer-events: none;
+    }
+
+    .n { top: 0; left: 50%; transform: translateX(-50%); }
+    .e { right: 0; top: 50%; transform: translateY(-50%); }
+    .s { bottom: 0; left: 50%; transform: translateX(-50%); }
+    .w { left: 0; top: 50%; transform: translateY(-50%); }
+  </style>
+</head>
+<body>
+  <div class="shell" id="shell">
+    <div class="cardinal n">N</div>
+    <div class="cardinal e">E</div>
+    <div class="cardinal s">S</div>
+    <div class="cardinal w">W</div>
+    <div class="dial" id="dial"></div>
+    <div class="needle"></div>
+    <div class="knob"></div>
+    <div class="center">
+      <div class="value" id="value">045</div>
+      <div class="compass" id="compass">NE</div>
+    </div>
+  </div>
+  <script>
+    const root = document.documentElement;
+    const shell = document.getElementById("shell");
+    const valueEl = document.getElementById("value");
+    const compassEl = document.getElementById("compass");
+    let value = 45;
+    let dragging = false;
+
+    function post(type, data) {
+      window.parent.postMessage(Object.assign({
+        isStreamlitMessage: true,
+        type: type
+      }, data || {}), "*");
+    }
+
+    function componentReady() {
+      post("streamlit:componentReady", { apiVersion: 1 });
+      setFrameHeight();
+    }
+
+    function setFrameHeight() {
+      post("streamlit:setFrameHeight", { height: document.body.scrollHeight || 245 });
+    }
+
+    function setComponentValue(nextValue) {
+      post("streamlit:setComponentValue", {
+        value: nextValue,
+        dataType: "json"
+      });
+    }
+
+    function normalize(degrees) {
+      return ((Math.round(degrees) % 360) + 360) % 360;
+    }
+
+    function compassLabel(degrees) {
+      const labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      return labels[Math.floor((normalize(degrees) + 22.5) / 45) % 8];
+    }
+
+    function angleFromPoint(clientX, clientY) {
+      const rect = shell.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const radians = Math.atan2(clientY - centerY, clientX - centerX);
+      return normalize((radians * 180 / Math.PI) + 90);
+    }
+
+    function render(nextValue, emit) {
+      value = normalize(nextValue);
+      root.style.setProperty("--angle", value + "deg");
+      valueEl.textContent = String(value).padStart(3, "0");
+      compassEl.textContent = compassLabel(value);
+      if (emit) {
+        setComponentValue(value);
+      }
+    }
+
+    shell.addEventListener("pointerdown", function(event) {
+      dragging = true;
+      shell.setPointerCapture(event.pointerId);
+      render(angleFromPoint(event.clientX, event.clientY), true);
+    });
+
+    shell.addEventListener("pointermove", function(event) {
+      if (!dragging) {
+        return;
+      }
+      render(angleFromPoint(event.clientX, event.clientY), true);
+    });
+
+    shell.addEventListener("pointerup", function(event) {
+      dragging = false;
+      shell.releasePointerCapture(event.pointerId);
+    });
+
+    shell.addEventListener("pointercancel", function(event) {
+      dragging = false;
+      shell.releasePointerCapture(event.pointerId);
+    });
+
+    window.addEventListener("message", function(event) {
+      if (!event.data || event.data.type !== "streamlit:render") {
+        return;
+      }
+      const args = event.data.args || {};
+      const incoming = Number(args.value);
+      if (!Number.isNaN(incoming)) {
+        render(incoming, false);
+      }
+      setFrameHeight();
+    });
+
+    render(value, false);
+    componentReady();
+    window.addEventListener("resize", setFrameHeight);
+  </script>
+</body>
+</html>
