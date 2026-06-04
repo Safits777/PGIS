@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 def _inside_streamlit() -> bool:
@@ -77,6 +78,10 @@ TIME_COLORS = {
     "밤": "#a78bfa",
 }
 SEOUL_CENTER = (37.5665, 126.9780)
+DIRECTION_DIAL_COMPONENT = components.declare_component(
+    "direction_dial",
+    path=os.path.join(os.path.dirname(__file__), "components", "direction_dial"),
+)
 
 
 SAMPLE_SPOTS: list[dict[str, Any]] = [
@@ -720,6 +725,7 @@ def ensure_state() -> None:
         "picking_location": False,
         "filter_open": False,
         "last_context_click_nonce": None,
+        "record_direction": 45,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -734,6 +740,27 @@ def compass_label(degrees: int | float) -> str:
     labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
     idx = int((float(degrees) + 22.5) // 45) % 8
     return labels[idx]
+
+
+def render_direction_dial() -> int:
+    current = int(st.session_state.get("record_direction", 45)) % 360
+    returned = DIRECTION_DIAL_COMPONENT(value=current, key="record_direction_dial", default=current)
+    direction = current
+    if returned is not None:
+        try:
+            direction = int(round(float(returned))) % 360
+        except (TypeError, ValueError):
+            direction = current
+    st.session_state.record_direction = direction
+    st.markdown(
+        f"""
+        <div class="pill-row" style="justify-content:center;margin-top:-.35rem;margin-bottom:.9rem;">
+            <span class="pill">VECTOR {direction:03d} {compass_label(direction)}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    return direction
 
 
 def destination_point(lat: float, lng: float, bearing: float, distance_m: float = 360) -> tuple[float, float]:
@@ -829,8 +856,45 @@ def popup_html(spot: dict[str, Any]) -> str:
     """
 
 
+def record_popup_html(spot: dict[str, Any]) -> str:
+    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+    link = link_html(spot.get("url") or spot.get("memo"), "OPEN URL")
+    shot_at = spot.get("shot_at") or spot.get("created_at") or "-"
+    body = spot.get("body") or "-"
+    lens = spot.get("lens") or spot.get("camera") or "-"
+    iso = spot.get("iso") or "-"
+    aperture = spot.get("aperture") or "-"
+    shutter_speed = spot.get("shutter_speed") or "-"
+    return f"""
+    <div style="width:282px;font-family:Inter,Arial,sans-serif;color:#f8fafc;background:#020611;">
+        <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
+            <div style="font-size:12px;color:#94a3b8;font-weight:800;text-transform:uppercase;">SPOT NODE</div>
+            <div style="font-size:16px;font-weight:900;line-height:1.25;color:#ffffff;">{escape(spot.get("title"))}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+            <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
+                <div style="font-size:10px;color:#94a3b8;font-weight:800;">URL</div>
+                <div style="font-size:12px;margin-top:8px;">{link}</div>
+            </div>
+            <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
+                <div style="font-size:10px;color:#94a3b8;font-weight:800;">SHOT TIME</div>
+                <div style="font-size:12px;color:#f8fafc;font-weight:850;margin-top:4px;">{escape(shot_at)}</div>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;line-height:1.45;color:#cbd5e1;border-top:1px solid rgba(148,163,184,.18);padding-top:9px;">
+            <div><span style="color:#94a3b8;font-weight:800;">BODY</span><br />{escape(body)}</div>
+            <div><span style="color:#94a3b8;font-weight:800;">LENS</span><br />{escape(lens)}</div>
+            <div><span style="color:#94a3b8;font-weight:800;">ISO</span><br />{escape(iso)}</div>
+            <div><span style="color:#94a3b8;font-weight:800;">F</span><br />{escape(aperture)}</div>
+            <div><span style="color:#94a3b8;font-weight:800;">SHUTTER</span><br />{escape(shutter_speed)}</div>
+            <div><span style="color:#94a3b8;font-weight:800;">VECTOR</span><br />{compass_label(spot.get("direction", 0))}</div>
+        </div>
+    </div>
+    """
+
+
 def add_direction_vector(fmap: folium.Map, spot: dict[str, Any]) -> None:
-    color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
     end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
     folium.CircleMarker(
         location=(spot["lat"], spot["lng"]),
@@ -944,7 +1008,7 @@ class DirectionClickScript(MacroElement):
         self.start_lng = f"{float(spot['lng']):.8f}"
         self.end_lat = f"{end_lat:.8f}"
         self.end_lng = f"{end_lng:.8f}"
-        self.color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+        self.color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
 
 
 class RightClickSelectScript(MacroElement):
@@ -963,6 +1027,30 @@ class RightClickSelectScript(MacroElement):
                     window.__pgisDirectionLayer = null;
                 }
                 map.closePopup();
+                if (window.__pgisSelectedPointLayer) {
+                    map.removeLayer(window.__pgisSelectedPointLayer);
+                }
+                window.__pgisSelectedPointLayer = L.layerGroup([
+                    L.circleMarker(event.latlng, {
+                        radius: 12,
+                        color: "#f8fafc",
+                        weight: 2,
+                        fill: true,
+                        fillColor: "#22d3ee",
+                        fillOpacity: 0.34,
+                        opacity: 0.94,
+                        interactive: false
+                    }),
+                    L.circleMarker(event.latlng, {
+                        radius: 4,
+                        color: "#020611",
+                        weight: 1,
+                        fill: true,
+                        fillColor: "#ffffff",
+                        fillOpacity: 0.96,
+                        interactive: false
+                    })
+                ]).addTo(map);
                 var nonce = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
                 var payload = {
                     _pgis_event: "contextmenu",
@@ -1071,17 +1159,29 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     lat, lng = st.session_state.selected_point
     folium.CircleMarker(
         location=(lat, lng),
-        radius=4,
-        color="#22d3ee",
+        radius=12,
+        color="#f8fafc",
         fill=True,
         fill_color="#22d3ee",
-        fill_opacity=0.66,
-        weight=1,
+        fill_opacity=0.34,
+        opacity=0.94,
+        weight=2,
         tooltip="선택 지점",
     ).add_to(fmap)
 
+    folium.CircleMarker(
+        location=(lat, lng),
+        radius=4,
+        color="#020611",
+        fill=True,
+        fill_color="#ffffff",
+        fill_opacity=0.96,
+        weight=1,
+        tooltip="selected point",
+    ).add_to(fmap)
+
     for spot in spots:
-        color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+        color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
         active = spot["id"] == st.session_state.active_spot_id
         marker = folium.CircleMarker(
             location=(spot["lat"], spot["lng"]),
@@ -1092,7 +1192,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             fill_color=color,
             fill_opacity=0.92 if active else 0.72,
             tooltip=f"{spot['id']} · {spot['title']}",
-            popup=folium.Popup(popup_html(spot), max_width=320),
+            popup=folium.Popup(record_popup_html(spot), max_width=320),
             bubbling_mouse_events=False,
         ).add_to(fmap)
         DirectionClickScript(fmap, marker.get_name(), spot).add_to(fmap)
@@ -1112,19 +1212,28 @@ def filtered_spots() -> list[dict[str, Any]]:
     query = st.session_state.search_query.strip().lower()
     result: list[dict[str, Any]] = []
     for spot in st.session_state.spots:
+        weather = spot.get("weather", WEATHER_OPTIONS[0])
+        time_band = spot.get("time_band", TIME_OPTIONS[0])
         haystack = " ".join(
             [
-                spot["title"],
-                spot["weather"],
-                spot["time_band"],
+                spot.get("title", ""),
+                weather,
+                time_band,
                 spot.get("mood", ""),
                 spot.get("camera", ""),
                 spot.get("memo", ""),
+                str(spot.get("url", "")),
+                str(spot.get("shot_at", "")),
+                str(spot.get("body", "")),
+                str(spot.get("lens", "")),
+                str(spot.get("iso", "")),
+                str(spot.get("aperture", "")),
+                str(spot.get("shutter_speed", "")),
             ]
         ).lower()
-        if spot["weather"] not in weather_filter:
+        if weather not in weather_filter:
             continue
-        if spot["time_band"] not in time_filter:
+        if time_band not in time_filter:
             continue
         if query and query not in haystack:
             continue
@@ -1142,17 +1251,21 @@ def spot_csv(spots: list[dict[str, Any]]) -> bytes:
             "lat",
             "lng",
             "direction",
-            "weather",
-            "time_band",
-            "mood",
-            "camera",
-            "memo",
+            "url",
+            "shot_at",
+            "body",
+            "lens",
+            "iso",
+            "aperture",
+            "shutter_speed",
             "created_at",
         ],
     )
     writer.writeheader()
     for spot in spots:
-        writer.writerow({key: spot.get(key, "") for key in writer.fieldnames})
+        row = {key: spot.get(key, "") for key in writer.fieldnames}
+        row["url"] = spot.get("url") or spot.get("memo", "")
+        writer.writerow(row)
     return out.getvalue().encode("utf-8-sig")
 
 
@@ -1160,8 +1273,14 @@ def stats(spots: list[dict[str, Any]]) -> tuple[str, str, str, str]:
     total = str(len(st.session_state.spots))
     visible = str(len(spots))
     if st.session_state.spots:
-        weather = max(WEATHER_OPTIONS, key=lambda item: sum(spot["weather"] == item for spot in st.session_state.spots))
-        time_band = max(TIME_OPTIONS, key=lambda item: sum(spot["time_band"] == item for spot in st.session_state.spots))
+        weather = max(
+            WEATHER_OPTIONS,
+            key=lambda item: sum(spot.get("weather", WEATHER_OPTIONS[0]) == item for spot in st.session_state.spots),
+        )
+        time_band = max(
+            TIME_OPTIONS,
+            key=lambda item: sum(spot.get("time_band", TIME_OPTIONS[0]) == item for spot in st.session_state.spots),
+        )
     else:
         weather = "-"
         time_band = "-"
@@ -1266,7 +1385,7 @@ def render_filter_floating(spots: list[dict[str, Any]]) -> None:
             )
             return
 
-        st.text_input("Search", key="search_query", placeholder="title, mood, camera, link")
+        st.text_input("Search", key="search_query", placeholder="name, url, body, lens")
         st.multiselect("Weather", WEATHER_OPTIONS, key="weather_filter")
         st.multiselect("Time", TIME_OPTIONS, key="time_filter")
 
@@ -1274,20 +1393,22 @@ def render_filter_floating(spots: list[dict[str, Any]]) -> None:
         if not spots:
             st.markdown('<p class="muted">NO MATCHED SPOTS</p>', unsafe_allow_html=True)
         for spot in spots:
-            color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+            color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
             active_mark = "ACTIVE " if spot["id"] == st.session_state.active_spot_id else ""
-            if st.button(f"{active_mark}{spot['title']}", key=f"float_select_spot_{spot['id']}", use_container_width=True):
+            if st.button(f"{active_mark}{spot.get('title', '')}", key=f"float_select_spot_{spot['id']}", use_container_width=True):
                 st.session_state.active_spot_id = spot["id"]
                 st.session_state.selected_point = (spot["lat"], spot["lng"])
                 st.session_state.form_lat = spot["lat"]
                 st.session_state.form_lng = spot["lng"]
                 st.rerun()
+            primary_meta = spot.get("body") or spot.get("weather", WEATHER_OPTIONS[0])
+            secondary_meta = spot.get("lens") or spot.get("time_band", TIME_OPTIONS[0])
             st.markdown(
                 f"""
                 <div class="pill-row" style="margin-top:-.45rem;margin-bottom:.6rem;">
-                    <span class="pill" style="border-color:{color};">{escape(spot["weather"])}</span>
-                    <span class="pill">{escape(spot["time_band"])}</span>
-                    <span class="pill">{compass_label(spot["direction"])}</span>
+                    <span class="pill" style="border-color:{color};">{escape(primary_meta)}</span>
+                    <span class="pill">{escape(secondary_meta)}</span>
+                    <span class="pill">{compass_label(spot.get("direction", 0))}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1323,12 +1444,20 @@ def add_spot(
     lat: float,
     lng: float,
     direction: int,
-    weather: str,
-    time_band: str,
-    mood: str,
-    camera: str,
-    memo: str,
-    uploaded_file: Any,
+    weather: str | None = None,
+    time_band: str | None = None,
+    mood: str = "",
+    camera: str = "",
+    memo: str = "",
+    uploaded_file: Any = None,
+    *,
+    url: str = "",
+    shot_at: str = "",
+    body: str = "",
+    lens: str = "",
+    iso: str | int = "",
+    aperture: str = "",
+    shutter_speed: str = "",
 ) -> None:
     photo_bytes = None
     photo_mime = None
@@ -1336,17 +1465,25 @@ def add_spot(
         photo_bytes, photo_mime = compress_photo(uploaded_file)
 
     next_id = max([spot["id"] for spot in st.session_state.spots], default=0) + 1
+    url_value = (url or memo).strip()
     spot = {
         "id": next_id,
         "title": title.strip(),
         "lat": float(lat),
         "lng": float(lng),
         "direction": int(direction),
-        "weather": weather,
-        "time_band": time_band,
+        "weather": weather or WEATHER_OPTIONS[0],
+        "time_band": time_band or TIME_OPTIONS[0],
         "mood": mood.strip(),
         "camera": camera.strip(),
-        "memo": memo.strip(),
+        "memo": url_value,
+        "url": url_value,
+        "shot_at": shot_at.strip(),
+        "body": body.strip(),
+        "lens": lens.strip(),
+        "iso": str(iso).strip(),
+        "aperture": aperture.strip(),
+        "shutter_speed": shutter_speed.strip(),
         "photo_bytes": photo_bytes,
         "photo_mime": photo_mime,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -1450,41 +1587,56 @@ def render_record_form() -> None:
         unsafe_allow_html=True,
     )
 
+    st.markdown("### DIRECTION")
+    direction = render_direction_dial()
+
     with st.form("record_form", clear_on_submit=True):
-        title = st.text_input("Spot name", placeholder="night reflection, rooftop line")
-        direction = st.slider("Direction", min_value=0, max_value=359, value=45, step=1)
-        st.markdown(
-            f"""
-            <div class="pill-row">
-                <span class="pill">VECTOR {compass_label(direction)}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        title = st.text_input("Name", placeholder="Night reflection point")
+        url = st.text_input("URL", placeholder="https://example.com")
 
-        col_weather, col_time = st.columns(2)
-        with col_weather:
-            weather = st.selectbox("Weather", WEATHER_OPTIONS, index=0)
+        now = datetime.now()
+        col_date, col_time = st.columns(2)
+        with col_date:
+            shot_date = st.date_input("Shot date", value=now.date())
         with col_time:
-            time_band = st.selectbox("Time", TIME_OPTIONS, index=3)
+            shot_time = st.time_input("Shot time", value=now.time().replace(second=0, microsecond=0))
 
-        col_mood, col_camera = st.columns(2)
-        with col_mood:
-            mood = st.text_input("Mood", placeholder="reflection, mist, neon")
-        with col_camera:
-            camera = st.text_input("Lens / frame", placeholder="35mm low angle")
+        col_body, col_lens = st.columns(2)
+        with col_body:
+            body = st.text_input("Body", placeholder="Sony A7R V")
+        with col_lens:
+            lens = st.text_input("Lens", placeholder="35mm F1.4")
 
-        uploaded_file = st.file_uploader("Photo", type=["jpg", "jpeg", "png", "webp"])
-        memo = st.text_input("Link", placeholder="https://example.com")
+        col_iso, col_f, col_shutter = st.columns(3)
+        with col_iso:
+            iso = st.number_input("ISO", min_value=1, max_value=409600, value=100, step=50)
+        with col_f:
+            aperture = st.text_input("F", placeholder="2.8")
+        with col_shutter:
+            shutter_speed = st.text_input("Shutter", placeholder="1/125")
+
         submitted = st.form_submit_button("CREATE MARKER", type="primary", use_container_width=True)
 
     if submitted:
         if not title.strip():
-            st.error("Enter a spot name.")
-        elif memo.strip() and not is_valid_link(memo):
-            st.error("Link must start with http:// or https://.")
+            st.error("Enter a name.")
+        elif not is_valid_link(url):
+            st.error("URL must start with http:// or https://.")
         else:
-            add_spot(title, lat, lng, direction, weather, time_band, mood, camera, memo, uploaded_file)
+            shot_at = datetime.combine(shot_date, shot_time).strftime("%Y-%m-%d %H:%M")
+            add_spot(
+                title,
+                lat,
+                lng,
+                direction,
+                url=url,
+                shot_at=shot_at,
+                body=body,
+                lens=lens,
+                iso=iso,
+                aperture=aperture,
+                shutter_speed=shutter_speed,
+            )
             st.success("Marker added.")
             st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1540,6 +1692,62 @@ def render_active_detail() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_record_detail() -> None:
+    active = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
+    st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
+    st.markdown("### SELECTED")
+    if not active:
+        st.markdown('<p class="muted">No selected spot.</p>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    color = WEATHER_COLORS.get(active.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+    link = link_html(active.get("url") or active.get("memo"), "OPEN URL")
+    shot_at = active.get("shot_at") or active.get("created_at") or "-"
+    body = active.get("body") or "-"
+    lens = active.get("lens") or active.get("camera") or "-"
+    iso = active.get("iso") or "-"
+    aperture = active.get("aperture") or "-"
+    shutter_speed = active.get("shutter_speed") or "-"
+    st.markdown(
+        f"""
+        <div class="spot-card">
+            <div class="spot-title">
+                <span>{escape(active.get("title"))}</span>
+                <span style="color:{color};">{compass_label(active.get("direction", 0))}</span>
+            </div>
+            <div class="pill-row">
+                <span class="pill">{escape(shot_at)}</span>
+                <span class="pill">ISO {escape(iso)}</span>
+                <span class="pill">F {escape(aperture)}</span>
+                <span class="pill">{escape(shutter_speed)}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-top:.75rem;">
+                <div class="pill" style="display:block;">BODY<br /><strong>{escape(body)}</strong></div>
+                <div class="pill" style="display:block;">LENS<br /><strong>{escape(lens)}</strong></div>
+            </div>
+            <p class="muted" style="margin-bottom:0;margin-top:.7rem;">{link}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption(f"{active['lat']:.6f}, {active['lng']:.6f} · {active.get('created_at', '')}")
+
+    col_focus, col_delete = st.columns(2)
+    with col_focus:
+        if st.button("USE COORD", use_container_width=True):
+            st.session_state.selected_point = (active["lat"], active["lng"])
+            st.session_state.form_lat = active["lat"]
+            st.session_state.form_lng = active["lng"]
+            st.rerun()
+    with col_delete:
+        if st.button("DELETE", use_container_width=True):
+            st.session_state.spots = [spot for spot in st.session_state.spots if spot["id"] != active["id"]]
+            st.session_state.active_spot_id = st.session_state.spots[0]["id"] if st.session_state.spots else None
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def handle_map_return(map_data: dict[str, Any] | None) -> None:
     if not map_data:
         return
@@ -1564,6 +1772,7 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
             st.session_state.map_zoom = int(map_data.get("zoom", st.session_state.map_zoom))
         except (TypeError, ValueError):
             pass
+        st.rerun()
 
 
 def render_map(spots: list[dict[str, Any]]) -> None:
@@ -1591,7 +1800,7 @@ def main() -> None:
     if st.session_state.right_drawer_open:
         with st.container(key="right_drawer_panel"):
             render_record_form()
-            render_active_detail()
+            render_record_detail()
 
 
 if __name__ == "__main__":
