@@ -159,6 +159,9 @@ def inject_css() -> None:
             --neon-blue: #38bdf8;
             --neon-pink: #fb7185;
             --neon-violet: #a78bfa;
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-pill: 999px;
         }
 
         html, body, [data-testid="stAppViewContainer"], .stApp {
@@ -259,7 +262,7 @@ def inject_css() -> None:
                 linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(8, 13, 24, 0.76)),
                 linear-gradient(60deg, rgba(34, 211, 238, 0.18), rgba(251, 113, 133, 0.14), rgba(245, 158, 11, 0.10));
             box-shadow: 0 22px 70px rgba(0, 0, 0, 0.38);
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             padding: 1.05rem 1.2rem;
             margin-bottom: 1rem;
             overflow: hidden;
@@ -293,7 +296,7 @@ def inject_css() -> None:
                 linear-gradient(132deg, rgba(34, 211, 238, 0.10), transparent 24% 58%, rgba(251, 113, 133, 0.09)),
                 rgba(2, 6, 14, 0.86);
             backdrop-filter: blur(20px) saturate(1.15);
-            border-radius: 0;
+            border-radius: var(--radius-md);
             box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
         }
 
@@ -359,7 +362,7 @@ def inject_css() -> None:
             align-items: center;
             min-height: 26px;
             padding: 0.2rem 0.48rem;
-            border-radius: 0;
+            border-radius: var(--radius-pill);
             border: 1px solid rgba(226, 232, 240, 0.20);
             color: #e2e8f0;
             background: rgba(3, 7, 18, 0.78);
@@ -454,6 +457,7 @@ def inject_css() -> None:
                 inset 0 0 0 1px rgba(255, 255, 255, 0.045),
                 inset 4px 0 rgba(34, 211, 238, 0.42);
             backdrop-filter: blur(18px) saturate(1.18);
+            border-radius: var(--radius-md);
         }
 
         .filter-head {
@@ -474,6 +478,7 @@ def inject_css() -> None:
             font-size: 0.78rem;
             font-weight: 900;
             text-align: center;
+            border-radius: var(--radius-pill);
         }
 
         .filter-mini {
@@ -482,6 +487,27 @@ def inject_css() -> None:
             color: #cbd5e1;
             font-size: 0.82rem;
             line-height: 1.45;
+            border-radius: var(--radius-md);
+        }
+
+        .st-key-settings_floating_panel {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            width: min(230px, calc(100vw - 36px)) !important;
+            z-index: 82;
+            padding: 0.58rem;
+            background:
+                linear-gradient(132deg, rgba(251, 113, 133, 0.15), transparent 30% 64%, rgba(34, 211, 238, 0.13)),
+                rgba(2, 6, 15, 0.92);
+            border: 1px solid rgba(248, 250, 252, 0.24);
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.52), inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+            backdrop-filter: blur(18px) saturate(1.18);
+            border-radius: var(--radius-md);
+        }
+
+        .st-key-settings_floating_panel [data-testid="stMarkdownContainer"] p {
+            margin: 0;
         }
 
         .filter-mini strong {
@@ -518,7 +544,7 @@ def inject_css() -> None:
             min-width: var(--drawer-handle) !important;
             height: 148px;
             padding: 0 !important;
-            border-radius: 0 !important;
+            border-radius: var(--radius-md) !important;
             writing-mode: vertical-rl;
             text-orientation: mixed;
             letter-spacing: 0 !important;
@@ -526,7 +552,7 @@ def inject_css() -> None:
             font-size: 0.72rem;
             font-weight: 900;
             color: #f8fafc !important;
-            clip-path: polygon(0 8px, 100% 0, 100% calc(100% - 8px), 0 100%);
+            clip-path: none;
             background:
                 linear-gradient(180deg, rgba(34, 211, 238, 0.30), transparent 36% 64%, rgba(251, 113, 133, 0.26)),
                 linear-gradient(90deg, rgba(255,255,255,0.06), transparent),
@@ -544,7 +570,7 @@ def inject_css() -> None:
 
         .st-key-right_drawer_handle button {
             border-right: 3px solid var(--neon-pink) !important;
-            clip-path: polygon(0 0, 100% 8px, 100% 100%, 0 calc(100% - 8px));
+            clip-path: none;
         }
 
         .drawer-handle button:hover,
@@ -562,7 +588,7 @@ def inject_css() -> None:
         .stDownloadButton > button,
         [data-testid="stBaseButton-secondary"],
         [data-testid="stBaseButton-primary"] {
-            border-radius: 0;
+            border-radius: var(--radius-md);
             border: 1px solid rgba(226, 232, 240, 0.22);
             background:
                 linear-gradient(115deg, rgba(34, 211, 238, 0.12), transparent 40% 62%, rgba(251, 113, 133, 0.12)),
@@ -600,7 +626,7 @@ def inject_css() -> None:
         }
 
         input, textarea, [data-baseweb="select"] > div {
-            border-radius: 0 !important;
+            border-radius: var(--radius-sm) !important;
             background: rgba(2, 6, 17, 0.78) !important;
             border-color: rgba(148, 163, 184, 0.24) !important;
             color: #f8fafc !important;
@@ -613,7 +639,7 @@ def inject_css() -> None:
         }
 
         div[data-testid="stFileUploaderDropzone"] {
-            border-radius: 0;
+            border-radius: var(--radius-md);
             border-color: rgba(34, 211, 238, 0.36);
             background: rgba(3, 7, 18, 0.72);
         }
@@ -626,7 +652,7 @@ def inject_css() -> None:
             color: #f8fafc;
             border: 1px solid rgba(248, 250, 252, 0.34);
             box-shadow: 0 24px 56px rgba(0, 0, 0, 0.62), inset 0 0 0 1px rgba(255,255,255,0.08);
-            border-radius: 0;
+            border-radius: var(--radius-md);
         }
 
         .leaflet-popup-content {
@@ -674,6 +700,152 @@ def inject_css() -> None:
         """,
         unsafe_allow_html=True,
     )
+    if st.session_state.get("theme_mode", "dark") == "light":
+        st.markdown(
+            """
+            <style>
+            :root {
+                color-scheme: light;
+                --glass-bg: rgba(255, 255, 255, 0.84);
+                --glass-line: rgba(15, 23, 42, 0.16);
+                --glass-text: #0f172a;
+                --glass-muted: #64748b;
+                --panel-black: rgba(255, 255, 255, 0.94);
+                --panel-line: rgba(15, 23, 42, 0.14);
+            }
+
+            html, body, [data-testid="stAppViewContainer"], .stApp {
+                background: #f4f7fb;
+                color: #0f172a;
+            }
+
+            .stApp::before {
+                background:
+                    linear-gradient(116deg, transparent 0 18%, rgba(8, 145, 178, 0.12) 18% 18.5%, transparent 18.5% 43%, rgba(244, 63, 94, 0.10) 43% 43.45%, transparent 43.45% 71%, rgba(217, 119, 6, 0.10) 71% 71.5%, transparent 71.5%),
+                    linear-gradient(38deg, rgba(5, 150, 105, 0.08) 0 10%, transparent 10% 36%, rgba(124, 58, 237, 0.08) 36% 36.45%, transparent 36.45% 66%, rgba(14, 165, 233, 0.08) 66% 66.4%, transparent 66.4%),
+                    #f4f7fb;
+                opacity: 0.95;
+            }
+
+            .stApp::after {
+                background-image:
+                    linear-gradient(90deg, rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+                    linear-gradient(0deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
+                mix-blend-mode: multiply;
+                opacity: 0.28;
+            }
+
+            [data-testid="stSidebar"],
+            .st-key-right_drawer_panel {
+                background:
+                    linear-gradient(128deg, rgba(8, 145, 178, 0.10), transparent 22% 56%, rgba(124, 58, 237, 0.08)),
+                    rgba(255, 255, 255, 0.94);
+                border-color: rgba(15, 23, 42, 0.14);
+                box-shadow: 18px 0 54px rgba(15, 23, 42, 0.16), inset -1px 0 rgba(8, 145, 178, 0.16);
+            }
+
+            .st-key-right_drawer_panel {
+                box-shadow: -18px 0 54px rgba(15, 23, 42, 0.16), inset 1px 0 rgba(244, 63, 94, 0.14);
+            }
+
+            .hero,
+            .stat-tile,
+            .glass-panel,
+            .spot-card,
+            .st-key-filter_floating_panel,
+            .st-key-settings_floating_panel {
+                background:
+                    linear-gradient(132deg, rgba(8, 145, 178, 0.09), transparent 28% 62%, rgba(244, 63, 94, 0.07)),
+                    rgba(255, 255, 255, 0.86);
+                border-color: rgba(15, 23, 42, 0.14);
+                box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.56);
+            }
+
+            .glass-panel::before {
+                opacity: 0.34;
+            }
+
+            .hero-title,
+            .stat-value,
+            .spot-title,
+            .filter-mini strong,
+            [data-testid="stSidebar"] h3,
+            .st-key-right_drawer_panel h3 {
+                color: #0f172a;
+            }
+
+            .hero-sub,
+            .muted,
+            .filter-mini,
+            [data-testid="stSidebar"] label,
+            .st-key-right_drawer_panel label {
+                color: #475569 !important;
+            }
+
+            .pill,
+            .filter-count {
+                color: #0f172a;
+                background: rgba(255, 255, 255, 0.74);
+                border-color: rgba(15, 23, 42, 0.16);
+            }
+
+            .drawer-handle button,
+            .st-key-left_drawer_handle button,
+            .st-key-right_drawer_handle button,
+            .stButton > button,
+            .stDownloadButton > button,
+            [data-testid="stBaseButton-secondary"] {
+                color: #0f172a !important;
+                background:
+                    linear-gradient(115deg, rgba(8, 145, 178, 0.10), transparent 42% 62%, rgba(244, 63, 94, 0.10)),
+                    rgba(255, 255, 255, 0.86) !important;
+                border-color: rgba(15, 23, 42, 0.18) !important;
+            }
+
+            [data-testid="stBaseButton-primary"] {
+                color: #ffffff !important;
+                background:
+                    linear-gradient(90deg, rgba(8, 145, 178, 0.78), rgba(244, 63, 94, 0.70)),
+                    #0891b2 !important;
+            }
+
+            input,
+            textarea,
+            [data-baseweb="select"] > div {
+                color: #0f172a !important;
+                background: rgba(255, 255, 255, 0.86) !important;
+                border-color: rgba(15, 23, 42, 0.18) !important;
+            }
+
+            input:focus,
+            textarea:focus {
+                border-color: rgba(8, 145, 178, 0.72) !important;
+                box-shadow: 0 0 0 1px rgba(8, 145, 178, 0.24) !important;
+            }
+
+            div[data-testid="stFileUploaderDropzone"] {
+                background: rgba(255, 255, 255, 0.76);
+                border-color: rgba(8, 145, 178, 0.34);
+            }
+
+            .leaflet-popup-content-wrapper,
+            .leaflet-popup-tip {
+                background:
+                    linear-gradient(135deg, rgba(15,23,42,0.04), transparent 24% 72%, rgba(8,145,178,0.06)),
+                    rgba(255, 255, 255, 0.98);
+                color: #0f172a;
+                border-color: rgba(15, 23, 42, 0.18);
+                box-shadow: 0 20px 48px rgba(15, 23, 42, 0.16);
+            }
+
+            .leaflet-popup-close-button {
+                color: #0f172a !important;
+                text-shadow: none;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
     left_open = bool(st.session_state.get("left_drawer_open", False))
     right_open = bool(st.session_state.get("right_drawer_open", False))
     st.markdown(
@@ -724,6 +896,8 @@ def ensure_state() -> None:
         "form_lng": SEOUL_CENTER[1],
         "picking_location": False,
         "filter_open": False,
+        "settings_open": False,
+        "theme_mode": "dark",
         "last_context_click_nonce": None,
         "record_direction": 45,
     }
@@ -1033,20 +1207,20 @@ class RightClickSelectScript(MacroElement):
                 window.__pgisSelectedPointLayer = L.layerGroup([
                     L.circleMarker(event.latlng, {
                         radius: 12,
-                        color: "#f8fafc",
+                        color: "{{ this.selected_ring }}",
                         weight: 2,
                         fill: true,
-                        fillColor: "#22d3ee",
+                        fillColor: "{{ this.selected_fill }}",
                         fillOpacity: 0.34,
                         opacity: 0.94,
                         interactive: false
                     }),
                     L.circleMarker(event.latlng, {
                         radius: 4,
-                        color: "#020611",
+                        color: "{{ this.selected_inner_stroke }}",
                         weight: 1,
                         fill: true,
-                        fillColor: "#ffffff",
+                        fillColor: "{{ this.selected_inner_fill }}",
                         fillOpacity: 0.96,
                         interactive: false
                     })
@@ -1081,6 +1255,11 @@ class RightClickSelectScript(MacroElement):
         super().__init__()
         self._name = "RightClickSelectScript"
         self.map_name = fmap.get_name()
+        light_mode = st.session_state.get("theme_mode", "dark") == "light"
+        self.selected_ring = "#0f172a" if light_mode else "#f8fafc"
+        self.selected_fill = "#0891b2" if light_mode else "#22d3ee"
+        self.selected_inner_stroke = "#ffffff" if light_mode else "#020611"
+        self.selected_inner_fill = "#0f172a" if light_mode else "#ffffff"
 
 
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
@@ -1090,6 +1269,24 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         active_spot = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
         if active_spot:
             center = (active_spot["lat"], active_spot["lng"])
+    light_mode = st.session_state.get("theme_mode", "dark") == "light"
+    tile_url = (
+        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        if light_mode
+        else "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+    )
+    tile_name = "Light Matter" if light_mode else "Dark Matter"
+    map_bg = "#f4f7fb" if light_mode else "#060811"
+    popup_surface = "rgba(255, 255, 255, 0.98)" if light_mode else "rgba(2, 6, 17, 0.98)"
+    popup_text = "#0f172a" if light_mode else "#f8fafc"
+    popup_border = "rgba(15, 23, 42, 0.18)" if light_mode else "rgba(248, 250, 252, 0.34)"
+    popup_shadow = "0 20px 50px rgba(15, 23, 42, 0.18)" if light_mode else "0 22px 58px rgba(0, 0, 0, 0.62)"
+    popup_inset = "rgba(15, 23, 42, 0.05)" if light_mode else "rgba(255,255,255,0.08)"
+    popup_close_hover = "#020617" if light_mode else "#ffffff"
+    selected_ring = "#0f172a" if light_mode else "#f8fafc"
+    selected_fill = "#0891b2" if light_mode else "#22d3ee"
+    selected_inner_stroke = "#ffffff" if light_mode else "#020611"
+    selected_inner_fill = "#0f172a" if light_mode else "#ffffff"
 
     fmap = folium.Map(
         location=center,
@@ -1100,56 +1297,56 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         max_zoom=19,
     )
     folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        tiles=tile_url,
         attr="&copy; OpenStreetMap contributors &copy; CARTO",
-        name="Dark Matter",
+        name=tile_name,
         control=False,
         max_zoom=19,
         max_native_zoom=19,
     ).add_to(fmap)
     fmap.get_root().header.add_child(
         folium.Element(
-            """
+            f"""
             <style>
-            html, body {
+            html, body {{
                 width: 100%;
                 height: 100%;
                 margin: 0;
                 padding: 0;
                 overflow: hidden;
-                background: #060811;
-            }
-            .folium-map {
+                background: {map_bg};
+            }}
+            .folium-map {{
                 width: 100% !important;
                 height: 100vh !important;
-            }
-            .leaflet-container {
-                background: #060811;
-            }
+            }}
+            .leaflet-container {{
+                background: {map_bg};
+            }}
             .leaflet-popup-content-wrapper,
-            .leaflet-popup-tip {
+            .leaflet-popup-tip {{
                 background:
                     linear-gradient(135deg, rgba(255,255,255,0.08), transparent 24% 72%, rgba(34,211,238,0.08)),
-                    rgba(2, 6, 17, 0.98) !important;
-                color: #f8fafc !important;
-                border: 1px solid rgba(248, 250, 252, 0.34);
-                border-radius: 0 !important;
+                    {popup_surface} !important;
+                color: {popup_text} !important;
+                border: 1px solid {popup_border};
+                border-radius: 8px !important;
                 box-shadow:
-                    0 22px 58px rgba(0, 0, 0, 0.62),
-                    inset 0 0 0 1px rgba(255,255,255,0.08);
-            }
-            .leaflet-popup-content {
+                    {popup_shadow},
+                    inset 0 0 0 1px {popup_inset};
+            }}
+            .leaflet-popup-content {{
                 margin: 12px !important;
-            }
-            .leaflet-popup-close-button {
-                color: #f8fafc !important;
+            }}
+            .leaflet-popup-close-button {{
+                color: {popup_text} !important;
                 font-weight: 900 !important;
                 text-shadow: 0 0 12px rgba(255,255,255,0.45);
-            }
-            .leaflet-popup-close-button:hover {
+            }}
+            .leaflet-popup-close-button:hover {{
                 background: transparent !important;
-                color: #ffffff !important;
-            }
+                color: {popup_close_hover} !important;
+            }}
             </style>
             """
         )
@@ -1160,9 +1357,9 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     folium.CircleMarker(
         location=(lat, lng),
         radius=12,
-        color="#f8fafc",
+        color=selected_ring,
         fill=True,
-        fill_color="#22d3ee",
+        fill_color=selected_fill,
         fill_opacity=0.34,
         opacity=0.94,
         weight=2,
@@ -1172,9 +1369,9 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     folium.CircleMarker(
         location=(lat, lng),
         radius=4,
-        color="#020611",
+        color=selected_inner_stroke,
         fill=True,
-        fill_color="#ffffff",
+        fill_color=selected_inner_fill,
         fill_opacity=0.96,
         weight=1,
         tooltip="selected point",
@@ -1421,6 +1618,26 @@ def render_filter_floating(spots: list[dict[str, Any]]) -> None:
             mime="text/csv",
             use_container_width=True,
         )
+
+
+def render_settings_floating() -> None:
+    with st.container(key="settings_floating_panel"):
+        if st.button("SETTINGS", key="settings_floating_toggle", use_container_width=True):
+            st.session_state.settings_open = not st.session_state.settings_open
+            st.rerun()
+
+        if not st.session_state.settings_open:
+            return
+
+        light_mode = st.toggle(
+            "Light mode",
+            value=st.session_state.get("theme_mode", "dark") == "light",
+            key="settings_light_mode",
+        )
+        next_theme = "light" if light_mode else "dark"
+        if next_theme != st.session_state.get("theme_mode", "dark"):
+            st.session_state.theme_mode = next_theme
+            st.rerun()
 
 
 def render_drawer_handles() -> None:
@@ -1772,7 +1989,6 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
             st.session_state.map_zoom = int(map_data.get("zoom", st.session_state.map_zoom))
         except (TypeError, ValueError):
             pass
-        st.rerun()
 
 
 def render_map(spots: list[dict[str, Any]]) -> None:
@@ -1797,6 +2013,7 @@ def main() -> None:
     render_map(spots)
     inject_layout_vars()
     render_filter_floating(spots)
+    render_settings_floating()
     if st.session_state.right_drawer_open:
         with st.container(key="right_drawer_panel"):
             render_record_form()

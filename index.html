@@ -11,6 +11,8 @@
       --text: #f8fafc;
       --muted: #94a3b8;
       --bg: rgba(2, 6, 15, 0.96);
+      --dial-size: 184px;
+      --frame-height: 190px;
     }
 
     * {
@@ -19,28 +21,32 @@
 
     body {
       margin: 0;
-      min-height: 245px;
+      min-height: var(--frame-height);
       display: grid;
       place-items: center;
       background: transparent;
       color: var(--text);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow: hidden;
+      opacity: 1;
+      filter: none;
     }
 
     .shell {
-      width: min(238px, calc(100vw - 8px));
+      width: min(var(--dial-size), calc(100vw - 8px));
       aspect-ratio: 1;
       position: relative;
       display: grid;
       place-items: center;
       user-select: none;
       touch-action: none;
+      opacity: 1;
+      filter: none;
     }
 
     .dial {
       position: absolute;
-      inset: 10px;
+      inset: 8px;
       border-radius: 50%;
       border: 1px solid rgba(248, 250, 252, 0.28);
       background:
@@ -54,25 +60,30 @@
       cursor: crosshair;
     }
 
+    .shell:active .dial {
+      opacity: 1;
+      filter: none;
+    }
+
     .dial::before,
     .dial::after {
       content: "";
       position: absolute;
-      inset: 20px;
+      inset: 16px;
       border-radius: 50%;
       border: 1px solid rgba(248, 250, 252, 0.12);
       pointer-events: none;
     }
 
     .dial::after {
-      inset: 55px;
+      inset: 43px;
       border-color: rgba(34, 211, 238, 0.22);
     }
 
     .needle {
       position: absolute;
       width: 2px;
-      height: calc(50% - 28px);
+      height: calc(50% - 22px);
       left: calc(50% - 1px);
       bottom: 50%;
       transform-origin: 50% 100%;
@@ -86,12 +97,12 @@
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
       transform:
         rotate(var(--angle))
-        translateY(calc(-1 * (min(238px, calc(100vw - 8px)) / 2 - 28px)))
+        translateY(calc(-1 * (min(var(--dial-size), calc(100vw - 8px)) / 2 - 23px)))
         rotate(calc(-1 * var(--angle)))
         translate(-50%, -50%);
       border: 2px solid #f8fafc;
@@ -101,7 +112,7 @@
     }
 
     .center {
-      width: 108px;
+      width: 84px;
       aspect-ratio: 1;
       display: grid;
       place-items: center;
@@ -119,14 +130,14 @@
 
     .value {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 27px;
+      font-size: 22px;
       line-height: 1;
       font-weight: 900;
       color: #ffffff;
     }
 
     .compass {
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 900;
       color: var(--cyan);
     }
@@ -134,7 +145,7 @@
     .cardinal {
       position: absolute;
       color: var(--muted);
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 900;
       pointer-events: none;
     }
@@ -180,7 +191,7 @@
     }
 
     function setFrameHeight() {
-      post("streamlit:setFrameHeight", { height: document.body.scrollHeight || 245 });
+      post("streamlit:setFrameHeight", { height: document.body.scrollHeight || 190 });
     }
 
     function setComponentValue(nextValue) {
@@ -218,26 +229,40 @@
     }
 
     shell.addEventListener("pointerdown", function(event) {
+      event.preventDefault();
       dragging = true;
       shell.setPointerCapture(event.pointerId);
-      render(angleFromPoint(event.clientX, event.clientY), true);
+      render(angleFromPoint(event.clientX, event.clientY), false);
     });
 
     shell.addEventListener("pointermove", function(event) {
       if (!dragging) {
         return;
       }
-      render(angleFromPoint(event.clientX, event.clientY), true);
+      event.preventDefault();
+      render(angleFromPoint(event.clientX, event.clientY), false);
     });
 
     shell.addEventListener("pointerup", function(event) {
+      if (dragging) {
+        render(angleFromPoint(event.clientX, event.clientY), false);
+        setComponentValue(value);
+      }
       dragging = false;
-      shell.releasePointerCapture(event.pointerId);
+      if (shell.hasPointerCapture(event.pointerId)) {
+        shell.releasePointerCapture(event.pointerId);
+      }
     });
 
     shell.addEventListener("pointercancel", function(event) {
       dragging = false;
-      shell.releasePointerCapture(event.pointerId);
+      if (shell.hasPointerCapture(event.pointerId)) {
+        shell.releasePointerCapture(event.pointerId);
+      }
+    });
+
+    shell.addEventListener("contextmenu", function(event) {
+      event.preventDefault();
     });
 
     window.addEventListener("message", function(event) {
