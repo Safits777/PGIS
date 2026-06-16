@@ -404,8 +404,8 @@ def inject_css() -> None:
 
         .st-key-right_drawer_panel {
             position: fixed;
-            left: min(calc(100vw - var(--record-panel-width) - 16px), max(16px, var(--record-panel-left)));
-            top: min(calc(100vh - 96px), max(16px, var(--record-panel-top)));
+            left: 0;
+            top: 0;
             width: var(--record-panel-width) !important;
             min-width: var(--record-panel-width) !important;
             max-width: var(--record-panel-width) !important;
@@ -420,8 +420,14 @@ def inject_css() -> None:
                 var(--panel-black);
             border: 1px solid var(--panel-line);
             box-shadow: 0 22px 64px rgba(0, 0, 0, 0.56), inset 0 0 0 1px rgba(255,255,255,0.06);
-            transform: none;
+            transform: translate3d(
+                min(calc(100vw - var(--record-panel-width) - 16px), max(16px, var(--record-panel-left))),
+                min(calc(100vh - 96px), max(16px, var(--record-panel-top))),
+                0
+            );
             transition: opacity 160ms ease, box-shadow 180ms ease;
+            will-change: transform, opacity;
+            contain: layout paint style;
             z-index: 72;
             border-radius: var(--radius-md);
         }
@@ -934,6 +940,7 @@ def ensure_state() -> None:
     defaults = {
         "spots": [spot.copy() for spot in SAMPLE_SPOTS],
         "selected_point": SEOUL_CENTER,
+        "map_center": SEOUL_CENTER,
         "active_spot_id": 1,
         "weather_filter": WEATHER_OPTIONS.copy(),
         "time_filter": TIME_OPTIONS.copy(),
@@ -951,6 +958,7 @@ def ensure_state() -> None:
         "settings_open": False,
         "theme_mode": "dark",
         "last_context_click_nonce": None,
+        "last_panel_close_nonce": None,
         "record_direction": 45,
     }
     for key, value in defaults.items():
@@ -1349,6 +1357,11 @@ class RightClickSelectScript(MacroElement):
         {% macro script(this, kwargs) %}
         (function() {
             var map = {{ this.map_name }};
+            var selectedLatLng = {{ this.panel_open }} ? L.latLng({{ this.selected_lat }}, {{ this.selected_lng }}) : null;
+            var recordPanelOpen = {{ this.panel_open }};
+            var panelCloseNotified = false;
+            var panelSyncFrame = 0;
+            var panelOffset = { x: 18, y: 18 };
             function destinationPoint(latlng, bearing, distanceMeters) {
                 var radius = 6371000;
                 var bearingRad = bearing * Math.PI / 180;
@@ -1368,6 +1381,109 @@ class RightClickSelectScript(MacroElement):
             function compassLabel(degrees) {
                 var labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
                 return labels[Math.floor((((degrees % 360) + 360) % 360 + 22.5) / 45) % 8];
+            }
+            function sendComponentValue(payload) {
+                if (window.Streamlit && window.Streamlit.setComponentValue) {
+                    window.Streamlit.setComponentValue(payload);
+                } else {
+                    window.parent.postMessage({
+                        isStreamlitMessage: true,
+                        type: "streamlit:setComponentValue",
+                        value: payload,
+                        dataType: "json"
+                    }, "*");
+                }
+            }
+            function getHostDocument() {
+                try {
+                    return window.parent && window.parent.document ? window.parent.document : null;
+                } catch (error) {
+                    return null;
+                }
+            }
+            function setHostRecordPanelPosition(point) {
+                var hostDocument = getHostDocument();
+                if (!hostDocument || !hostDocument.documentElement) {
+                    return;
+                }
+                hostDocument.documentElement.style.setProperty(
+                    "--record-panel-left",
+                    Math.round(point.x + panelOffset.x) + "px"
+                );
+                hostDocument.documentElement.style.setProperty(
+                    "--record-panel-top",
+                    Math.round(point.y + panelOffset.y) + "px"
+                );
+                var panel = hostDocument.querySelector(".st-key-right_drawer_panel");
+                if (panel) {
+                    panel.style.opacity = "1";
+                    panel.style.pointerEvents = "";
+                }
+            }
+            function hideHostRecordPanel() {
+                var hostDocument = getHostDocument();
+                if (!hostDocument) {
+                    return;
+                }
+                var panel = hostDocument.querySelector(".st-key-right_drawer_panel");
+                if (panel) {
+                    panel.style.opacity = "0";
+                    panel.style.pointerEvents = "none";
+                }
+            }
+            function selectedPointIsInsideMap(point) {
+                var size = map.getSize();
+                return (
+                    map.getBounds().contains(selectedLatLng) &&
+                    point.x >= 0 &&
+                    point.y >= 0 &&
+                    point.x <= size.x &&
+                    point.y <= size.y
+                );
+            }
+            function closeRecordPanelOutOfBounds() {
+                if (!recordPanelOpen || panelCloseNotified) {
+                    return;
+                }
+                recordPanelOpen = false;
+                panelCloseNotified = true;
+                hideHostRecordPanel();
+                var center = map.getCenter();
+                sendComponentValue({
+                    _pgis_event: "record_panel_out_of_bounds",
+                    _pgis_nonce: String(Date.now()) + "-" + Math.random().toString(36).slice(2),
+                    zoom: map.getZoom(),
+                    center: {
+                        lat: center.lat,
+                        lng: center.lng
+                    },
+                    last_clicked: selectedLatLng ? {
+                        lat: selectedLatLng.lat,
+                        lng: selectedLatLng.lng
+                    } : null
+                });
+            }
+            function syncRecordPanelPosition() {
+                if (!recordPanelOpen || !selectedLatLng) {
+                    return;
+                }
+                var point = map.latLngToContainerPoint(selectedLatLng);
+                if (!selectedPointIsInsideMap(point)) {
+                    closeRecordPanelOutOfBounds();
+                    return;
+                }
+                setHostRecordPanelPosition(point);
+            }
+            function requestRecordPanelSync() {
+                if (!recordPanelOpen || panelSyncFrame) {
+                    return;
+                }
+                panelSyncFrame = (window.requestAnimationFrame || function(callback) {
+                    return window.setTimeout(callback, 16);
+                })(function() {
+                    panelSyncFrame = 0;
+                    syncRecordPanelPosition();
+                });
             }
             function clearSelectedPointMarkers() {
                 if (window.__pgisSelectedPointLayer) {
@@ -1443,11 +1559,19 @@ class RightClickSelectScript(MacroElement):
                     })
                 ]).addTo(map);
             }
+            map.on("move zoom resize", requestRecordPanelSync);
+            map.on("moveend zoomend", syncRecordPanelPosition);
+            if (recordPanelOpen) {
+                map.whenReady(requestRecordPanelSync);
+            }
             map.on("contextmenu", function(event) {
                 if (event && event.originalEvent) {
                     event.originalEvent.preventDefault();
                     L.DomEvent.stop(event.originalEvent);
                 }
+                selectedLatLng = event.latlng;
+                recordPanelOpen = true;
+                panelCloseNotified = false;
                 if (window.__pgisDirectionLayer) {
                     map.removeLayer(window.__pgisDirectionLayer);
                     window.__pgisDirectionLayer = null;
@@ -1455,7 +1579,7 @@ class RightClickSelectScript(MacroElement):
                 map.closePopup();
                 clearSelectedPointMarkers();
                 window.__pgisSelectedPointLayer = L.layerGroup([
-                    L.circleMarker(event.latlng, {
+                    L.circleMarker(selectedLatLng, {
                         radius: 12,
                         color: "{{ this.selected_ring }}",
                         weight: 2,
@@ -1466,7 +1590,7 @@ class RightClickSelectScript(MacroElement):
                         pgisSelectedPoint: true,
                         interactive: false
                     }),
-                    L.circleMarker(event.latlng, {
+                    L.circleMarker(selectedLatLng, {
                         radius: 4,
                         color: "{{ this.selected_inner_stroke }}",
                         weight: 1,
@@ -1477,14 +1601,20 @@ class RightClickSelectScript(MacroElement):
                         interactive: false
                     })
                 ]).addTo(map);
-                drawDirectionPreview(event.latlng, {{ this.default_direction }});
+                drawDirectionPreview(selectedLatLng, {{ this.default_direction }});
                 var nonce = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
                 var original = event.originalEvent || {};
-                var point = map.latLngToContainerPoint(event.latlng);
+                var point = map.latLngToContainerPoint(selectedLatLng);
+                var center = map.getCenter();
+                setHostRecordPanelPosition(point);
                 var payload = {
                     _pgis_event: "contextmenu",
                     _pgis_nonce: nonce,
                     zoom: map.getZoom(),
+                    center: {
+                        lat: center.lat,
+                        lng: center.lng
+                    },
                     container_point: {
                         x: point.x,
                         y: point.y
@@ -1494,20 +1624,11 @@ class RightClickSelectScript(MacroElement):
                         y: original.clientY || point.y
                     },
                     last_clicked: {
-                        lat: event.latlng.lat,
-                        lng: event.latlng.lng
+                        lat: selectedLatLng.lat,
+                        lng: selectedLatLng.lng
                     }
                 };
-                if (window.Streamlit && window.Streamlit.setComponentValue) {
-                    window.Streamlit.setComponentValue(payload);
-                } else {
-                    window.parent.postMessage({
-                        isStreamlitMessage: true,
-                        type: "streamlit:setComponentValue",
-                        value: payload,
-                        dataType: "json"
-                    }, "*");
-                }
+                sendComponentValue(payload);
             });
         })();
         {% endmacro %}
@@ -1525,10 +1646,14 @@ class RightClickSelectScript(MacroElement):
         self.selected_inner_fill = "#0f172a" if light_mode else "#ffffff"
         self.direction_color = "#dc2626" if light_mode else "#fb7185"
         self.default_direction = int(st.session_state.get("record_direction", 45)) % 360
+        selected_lat, selected_lng = st.session_state.get("selected_point", SEOUL_CENTER)
+        self.selected_lat = f"{float(selected_lat):.8f}"
+        self.selected_lng = f"{float(selected_lng):.8f}"
+        self.panel_open = "true" if st.session_state.get("right_drawer_open", False) else "false"
 
 
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
-    center = st.session_state.selected_point
+    center = st.session_state.get("map_center", st.session_state.selected_point)
     active_spot = None
     if st.session_state.active_spot_id:
         active_spot = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
@@ -2272,10 +2397,35 @@ def render_record_detail() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+def store_map_view(map_data: dict[str, Any]) -> None:
+    center = map_data.get("center") or {}
+    try:
+        st.session_state.map_center = (
+            round(float(center["lat"]), 6),
+            round(float(center["lng"]), 6),
+        )
+    except (KeyError, TypeError, ValueError):
+        pass
+    try:
+        st.session_state.map_zoom = int(map_data.get("zoom", st.session_state.map_zoom))
+    except (TypeError, ValueError):
+        pass
+
+
 def handle_map_return(map_data: dict[str, Any] | None) -> None:
     if not map_data:
         return
-    if map_data.get("_pgis_event") != "contextmenu":
+    event_type = map_data.get("_pgis_event")
+    if event_type == "record_panel_out_of_bounds":
+        nonce = map_data.get("_pgis_nonce")
+        if nonce and nonce == st.session_state.get("last_panel_close_nonce"):
+            return
+        st.session_state.last_panel_close_nonce = nonce
+        store_map_view(map_data)
+        st.session_state.right_drawer_open = False
+        st.session_state.picking_location = False
+        return
+    if event_type != "contextmenu":
         return
 
     clicked = map_data.get("last_clicked")
@@ -2284,6 +2434,7 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         if nonce and nonce == st.session_state.get("last_context_click_nonce"):
             return
         st.session_state.last_context_click_nonce = nonce
+        store_map_view(map_data)
         lat = round(float(clicked["lat"]), 6)
         lng = round(float(clicked["lng"]), 6)
         st.session_state.selected_point = (lat, lng)
@@ -2299,10 +2450,6 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         st.session_state.active_spot_id = None
         st.session_state.right_drawer_open = True
         st.session_state.picking_location = False
-        try:
-            st.session_state.map_zoom = int(map_data.get("zoom", st.session_state.map_zoom))
-        except (TypeError, ValueError):
-            pass
 
 
 def render_map(spots: list[dict[str, Any]]) -> None:
