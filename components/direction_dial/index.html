@@ -11,8 +11,8 @@
       --text: #f8fafc;
       --muted: #94a3b8;
       --bg: rgba(2, 6, 15, 0.96);
-      --dial-size: 184px;
-      --frame-height: 190px;
+      --dial-size: 104px;
+      --frame-height: 110px;
     }
 
     * {
@@ -50,11 +50,11 @@
       border-radius: 50%;
       border: 1px solid rgba(248, 250, 252, 0.28);
       background:
-        radial-gradient(circle at center, rgba(2, 6, 15, 0.96) 0 42%, transparent 43%),
+        radial-gradient(circle at center, rgba(2, 6, 15, 0.96) 0 39%, transparent 40%),
         conic-gradient(from 0deg, rgba(34, 211, 238, 0.95) 0 var(--angle), rgba(148, 163, 184, 0.20) var(--angle) 360deg),
         rgba(2, 6, 15, 0.86);
       box-shadow:
-        0 22px 50px rgba(0, 0, 0, 0.46),
+        0 12px 30px rgba(0, 0, 0, 0.42),
         inset 0 0 0 1px rgba(255, 255, 255, 0.06),
         inset 0 0 32px rgba(34, 211, 238, 0.08);
       cursor: crosshair;
@@ -69,21 +69,21 @@
     .dial::after {
       content: "";
       position: absolute;
-      inset: 16px;
+      inset: 11px;
       border-radius: 50%;
       border: 1px solid rgba(248, 250, 252, 0.12);
       pointer-events: none;
     }
 
     .dial::after {
-      inset: 43px;
+      inset: 27px;
       border-color: rgba(34, 211, 238, 0.22);
     }
 
     .needle {
       position: absolute;
       width: 2px;
-      height: calc(50% - 22px);
+      height: calc(50% - 15px);
       left: calc(50% - 1px);
       bottom: 50%;
       transform-origin: 50% 100%;
@@ -97,27 +97,27 @@
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 16px;
-      height: 16px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       transform:
         rotate(var(--angle))
-        translateY(calc(-1 * (min(var(--dial-size), calc(100vw - 8px)) / 2 - 23px)))
+        translateY(calc(-1 * (min(var(--dial-size), calc(100vw - 8px)) / 2 - 16px)))
         rotate(calc(-1 * var(--angle)))
         translate(-50%, -50%);
-      border: 2px solid #f8fafc;
+      border: 1px solid #f8fafc;
       background: var(--cyan);
-      box-shadow: 0 0 18px rgba(34, 211, 238, 0.8), 0 0 0 5px rgba(34, 211, 238, 0.14);
+      box-shadow: 0 0 12px rgba(34, 211, 238, 0.8), 0 0 0 3px rgba(34, 211, 238, 0.14);
       pointer-events: none;
     }
 
     .center {
-      width: 84px;
+      width: 48px;
       aspect-ratio: 1;
       display: grid;
       place-items: center;
       align-content: center;
-      gap: 4px;
+      gap: 2px;
       border-radius: 50%;
       border: 1px solid rgba(248, 250, 252, 0.26);
       background:
@@ -130,14 +130,14 @@
 
     .value {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 22px;
+      font-size: 14px;
       line-height: 1;
       font-weight: 900;
       color: #ffffff;
     }
 
     .compass {
-      font-size: 11px;
+      font-size: 8px;
       font-weight: 900;
       color: var(--cyan);
     }
@@ -145,7 +145,7 @@
     .cardinal {
       position: absolute;
       color: var(--muted);
-      font-size: 10px;
+      font-size: 8px;
       font-weight: 900;
       pointer-events: none;
     }
@@ -191,7 +191,7 @@
     }
 
     function setFrameHeight() {
-      post("streamlit:setFrameHeight", { height: document.body.scrollHeight || 190 });
+      post("streamlit:setFrameHeight", { height: document.body.scrollHeight || 110 });
     }
 
     function setComponentValue(nextValue) {

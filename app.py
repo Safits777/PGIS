@@ -5,6 +5,7 @@ import base64
 import csv
 import html
 import io
+import json
 import math
 import os
 import sys
@@ -60,21 +61,18 @@ st.set_page_config(
 )
 
 
-WEATHER_OPTIONS = ["맑음", "구름", "안개", "비", "눈"]
-TIME_OPTIONS = ["새벽", "아침", "낮", "해질녘", "밤"]
+WEATHER_OPTIONS = ["맑음", "구름", "비", "눈", "안개"]
+TIME_OPTIONS = ["오전", "오후"]
 WEATHER_COLORS = {
     "맑음": "#facc15",
     "구름": "#94a3b8",
-    "안개": "#c4b5fd",
     "비": "#38bdf8",
     "눈": "#f8fafc",
+    "안개": "#c4b5fd",
 }
 TIME_COLORS = {
-    "새벽": "#67e8f9",
-    "아침": "#fde68a",
-    "낮": "#34d399",
-    "해질녘": "#fb7185",
-    "밤": "#a78bfa",
+    "오전": "#67e8f9",
+    "오후": "#fb7185",
 }
 SEOUL_CENTER = (37.5665, 126.9780)
 DIRECTION_DIAL_COMPONENT = components.declare_component(
@@ -87,47 +85,41 @@ SAMPLE_SPOTS: list[dict[str, Any]] = [
     {
         "id": 1,
         "title": "청계천 유리 반사 라인",
+        "URL": "https://www.instagram.com/",
         "lat": 37.5684,
         "lng": 126.9845,
-        "direction": 62,
+        "drct": 62,
         "weather": "비",
-        "time_band": "밤",
-        "mood": "네온 반사",
-        "camera": "24mm wide",
-        "memo": "https://www.openstreetmap.org/?mlat=37.5684&mlon=126.9845#map=17/37.5684/126.9845",
-        "photo_bytes": None,
-        "photo_mime": None,
-        "created_at": "sample",
+        "time": "오후 09:20",
+        "body": "Sony A7R V",
+        "lens": "FE 24mm F1.4 GM",
+        "comp": {"F값": "1.8", "ISO값": "800", "셔터스피드": "1/60", "화각": "24mm"},
     },
     {
         "id": 2,
         "title": "남산 실루엣 컷",
+        "URL": "https://www.instagram.com/",
         "lat": 37.5512,
         "lng": 126.9882,
-        "direction": 300,
+        "drct": 300,
         "weather": "구름",
-        "time_band": "해질녘",
-        "mood": "역광 실루엣",
-        "camera": "50mm",
-        "memo": "https://www.openstreetmap.org/?mlat=37.5512&mlon=126.9882#map=17/37.5512/126.9882",
-        "photo_bytes": None,
-        "photo_mime": None,
-        "created_at": "sample",
+        "time": "오후 06:45",
+        "body": "Canon EOS R5",
+        "lens": "RF 50mm F1.2L",
+        "comp": {"F값": "2.8", "ISO값": "200", "셔터스피드": "1/250", "화각": "50mm"},
     },
     {
         "id": 3,
         "title": "한강 수면 컬러 패치",
+        "URL": "https://www.instagram.com/",
         "lat": 37.5287,
         "lng": 126.9326,
-        "direction": 255,
+        "drct": 255,
         "weather": "맑음",
-        "time_band": "새벽",
-        "mood": "낮은 채도",
-        "camera": "35mm",
-        "memo": "https://www.openstreetmap.org/?mlat=37.5287&mlon=126.9326#map=17/37.5287/126.9326",
-        "photo_bytes": None,
-        "photo_mime": None,
-        "created_at": "sample",
+        "time": "오전 05:35",
+        "body": "Nikon Z8",
+        "lens": "NIKKOR Z 35mm F1.8 S",
+        "comp": {"F값": "4", "ISO값": "100", "셔터스피드": "1/125", "화각": "35mm"},
     },
 ]
 
@@ -152,8 +144,8 @@ def inject_css() -> None:
             --right-drawer-x: calc(100% + 1px);
             --left-handle-left: 0px;
             --right-handle-right: 0px;
-            --record-panel-width: min(360px, calc(100vw - 32px));
-            --record-panel-left: calc(100vw - 390px);
+            --record-panel-width: min(330px, calc(100vw - 24px));
+            --record-panel-left: calc(100vw - 360px);
             --record-panel-top: 18px;
             --panel-black: rgba(2, 6, 15, 0.94);
             --panel-line: rgba(148, 163, 184, 0.26);
@@ -409,9 +401,9 @@ def inject_css() -> None:
             width: var(--record-panel-width) !important;
             min-width: var(--record-panel-width) !important;
             max-width: var(--record-panel-width) !important;
-            max-height: min(78vh, calc(100vh - 32px));
+            max-height: min(72vh, calc(100vh - 24px));
             height: auto;
-            padding: 0.72rem;
+            padding: 0.58rem;
             overflow-y: auto;
             overflow-x: hidden;
             background:
@@ -422,7 +414,7 @@ def inject_css() -> None:
             box-shadow: 0 22px 64px rgba(0, 0, 0, 0.56), inset 0 0 0 1px rgba(255,255,255,0.06);
             transform: translate3d(
                 min(calc(100vw - var(--record-panel-width) - 16px), max(16px, var(--record-panel-left))),
-                min(calc(100vh - 96px), max(16px, var(--record-panel-top))),
+                min(calc(100vh - 78px), max(12px, var(--record-panel-top))),
                 0
             );
             transition: opacity 160ms ease, box-shadow 180ms ease;
@@ -460,7 +452,7 @@ def inject_css() -> None:
             grid-template-columns: 1fr auto;
             gap: 0.55rem;
             align-items: center;
-            margin-bottom: 0.55rem;
+            margin-bottom: 0.35rem;
         }
 
         .record-title {
@@ -481,6 +473,52 @@ def inject_css() -> None:
             color: #67e8f9;
             background: rgba(3, 7, 18, 0.68);
             font: 800 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        .st-key-right_drawer_panel [data-testid="stVerticalBlock"] {
+            gap: 0.35rem;
+        }
+
+        .st-key-right_drawer_panel [data-testid="stHorizontalBlock"] {
+            gap: 0.45rem;
+        }
+
+        .st-key-right_drawer_panel label {
+            font-size: 0.74rem !important;
+            line-height: 1.2 !important;
+            margin-bottom: 0.1rem !important;
+        }
+
+        .st-key-right_drawer_panel input,
+        .st-key-right_drawer_panel [data-baseweb="select"] > div {
+            min-height: 34px !important;
+            font-size: 0.84rem !important;
+        }
+
+        .st-key-right_drawer_panel .stButton > button,
+        .st-key-right_drawer_panel [data-testid="stBaseButton-secondary"],
+        .st-key-right_drawer_panel [data-testid="stBaseButton-primary"] {
+            min-height: 34px !important;
+            padding: 0.25rem 0.55rem !important;
+            font-size: 0.82rem !important;
+        }
+
+        .record-dial-caption {
+            margin: -0.15rem 0 0;
+            text-align: center;
+            color: #67e8f9;
+            font: 900 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        .record-time-row {
+            margin-top: -0.1rem;
+        }
+
+        .record-advanced-note {
+            margin: 0.1rem 0 0;
+            color: var(--glass-muted);
+            font-size: 0.74rem;
+            line-height: 1.35;
         }
 
 
@@ -937,6 +975,7 @@ def inject_layout_vars() -> None:
 
 
 def ensure_state() -> None:
+    now = datetime.now()
     defaults = {
         "spots": [spot.copy() for spot in SAMPLE_SPOTS],
         "selected_point": SEOUL_CENTER,
@@ -960,10 +999,22 @@ def ensure_state() -> None:
         "last_context_click_nonce": None,
         "last_panel_close_nonce": None,
         "record_direction": 45,
+        "record_advance_open": False,
+        "record_time_text": now.strftime("%I:%M"),
+        "record_meridiem": "오전" if now.hour < 12 else "오후",
+        "record_iso_text": "100",
+        "record_f_value": "",
+        "record_focal": "",
+        "record_shutter_seconds_text": "1",
+        "record_shutter_denominator_text": "125",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    st.session_state.spots = [
+        normalize_spot(spot, index + 1)
+        for index, spot in enumerate(st.session_state.get("spots", []))
+    ]
     current_weather_filter = st.session_state.get("weather_filter") or []
     current_time_filter = st.session_state.get("time_filter") or []
     if not set(current_weather_filter).issubset(set(WEATHER_OPTIONS)):
@@ -982,6 +1033,106 @@ def compass_label(degrees: int | float) -> str:
     return labels[idx]
 
 
+def spot_drct(spot: dict[str, Any]) -> int:
+    try:
+        return int(float(spot.get("drct", spot.get("direction", 0)))) % 360
+    except (TypeError, ValueError):
+        return 0
+
+
+def spot_url(spot: dict[str, Any]) -> str:
+    return str(spot.get("URL") or spot.get("url") or spot.get("memo") or "").strip()
+
+
+def spot_comp(spot: dict[str, Any]) -> dict[str, str]:
+    comp = spot.get("comp")
+    if not isinstance(comp, dict):
+        comp = {}
+    return {
+        "F값": str(comp.get("F값") or spot.get("aperture") or "").strip(),
+        "ISO값": str(comp.get("ISO값") or spot.get("iso") or "").strip(),
+        "셔터스피드": str(comp.get("셔터스피드") or spot.get("shutter_speed") or "").strip(),
+        "화각": str(comp.get("화각") or "").strip(),
+    }
+
+
+def time_meridiem(value: str | None) -> str:
+    text = str(value or "").strip()
+    if text.startswith("오후"):
+        return "오후"
+    return "오전"
+
+
+def normalize_12h_clock(value: str | None) -> str | None:
+    text = str(value or "").strip().replace(".", ":")
+    if not text:
+        return None
+    if ":" in text:
+        hour_text, minute_text = text.split(":", 1)
+    elif text.isdigit() and len(text) in {3, 4}:
+        hour_text, minute_text = text[:-2], text[-2:]
+    else:
+        hour_text, minute_text = text, "00"
+    if not hour_text.isdigit() or not minute_text.isdigit():
+        return None
+    hour = int(hour_text)
+    minute = int(minute_text)
+    if not 1 <= hour <= 12 or not 0 <= minute <= 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
+
+
+def normalize_time_value(value: str | None, meridiem: str | None = None) -> str:
+    text = str(value or "").strip()
+    selected_meridiem = meridiem if meridiem in TIME_OPTIONS else time_meridiem(text)
+    for marker in TIME_OPTIONS:
+        if text.startswith(marker):
+            text = text[len(marker) :].strip()
+            selected_meridiem = marker
+            break
+    if not text:
+        text = datetime.now().strftime("%I:%M")
+    try:
+        parsed = datetime.fromisoformat(text)
+        selected_meridiem = "오전" if parsed.hour < 12 else "오후"
+        hour = parsed.hour % 12 or 12
+        return f"{selected_meridiem} {hour:02d}:{parsed.minute:02d}"
+    except ValueError:
+        pass
+    clock = normalize_12h_clock(text)
+    if clock:
+        return f"{selected_meridiem} {clock}"
+    legacy_map = {
+        "새벽": "오전 05:30",
+        "아침": "오전 08:00",
+        "낮": "오후 12:00",
+        "해질녘": "오후 06:30",
+        "밤": "오후 09:00",
+    }
+    if value in legacy_map:
+        return legacy_map[str(value)]
+    return f"{selected_meridiem} {datetime.now().strftime('%I:%M')}"
+
+
+def normalize_spot(spot: dict[str, Any], fallback_id: int | None = None) -> dict[str, Any]:
+    comp = spot_comp(spot)
+    weather = spot.get("weather") if spot.get("weather") in WEATHER_OPTIONS else WEATHER_OPTIONS[0]
+    time_value = spot.get("time") or spot.get("shot_at") or spot.get("time_band")
+    return {
+        "id": spot.get("id", fallback_id or 0),
+        "title": str(spot.get("title") or "").strip(),
+        "URL": spot_url(spot),
+        "lat": float(spot.get("lat", SEOUL_CENTER[0])),
+        "lng": float(spot.get("lng", SEOUL_CENTER[1])),
+        "drct": spot_drct(spot),
+        "weather": weather,
+        "time": normalize_time_value(str(time_value or "")),
+        "body": str(spot.get("body") or "").strip(),
+        "lens": str(spot.get("lens") or spot.get("camera") or "").strip(),
+        "comp": comp,
+    }
+
+
 def render_direction_dial() -> int:
     current = int(st.session_state.get("record_direction", 45)) % 360
     returned = DIRECTION_DIAL_COMPONENT(value=current, key="record_direction_dial", default=current)
@@ -994,9 +1145,7 @@ def render_direction_dial() -> int:
     st.session_state.record_direction = direction
     st.markdown(
         f"""
-        <div class="pill-row" style="justify-content:center;margin-top:-.35rem;margin-bottom:.9rem;">
-            <span class="pill">VECTOR {direction:03d} {compass_label(direction)}</span>
-        </div>
+        <div class="record-dial-caption">{direction:03d} {compass_label(direction)}</div>
         """,
         unsafe_allow_html=True,
     )
@@ -1064,7 +1213,7 @@ def data_uri(photo_bytes: bytes | None, mime: str | None) -> str | None:
 
 
 def popup_html(spot: dict[str, Any]) -> str:
-    color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
     img = data_uri(spot.get("photo_bytes"), spot.get("photo_mime"))
     image_html = ""
     if img:
@@ -1072,7 +1221,7 @@ def popup_html(spot: dict[str, Any]) -> str:
             f'<img src="{img}" style="width:100%;max-height:150px;object-fit:cover;'
             'margin-bottom:10px;border:1px solid rgba(148,163,184,0.24);" />'
         )
-    link = link_html(spot.get("memo"))
+    link = link_html(spot_url(spot))
     return f"""
     <div style="width:282px;font-family:Inter,Arial,sans-serif;color:#f8fafc;background:#020611;">
         {image_html}
@@ -1087,24 +1236,26 @@ def popup_html(spot: dict[str, Any]) -> str:
             </div>
             <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
                 <div style="font-size:10px;color:#94a3b8;font-weight:800;">CONDITION</div>
-                <div style="font-size:12px;color:#f8fafc;font-weight:850;margin-top:4px;">{escape(spot["weather"])}</div>
-                <div style="font-size:12px;color:#cbd5e1;font-weight:750;">{escape(spot["time_band"])}</div>
+                <div style="font-size:12px;color:#f8fafc;font-weight:850;margin-top:4px;">{escape(spot.get("weather"))}</div>
+                <div style="font-size:12px;color:#cbd5e1;font-weight:750;">{escape(spot.get("time"))}</div>
             </div>
         </div>
-        <div style="font-size:12px;line-height:1.55;color:#cbd5e1;border-top:1px solid rgba(148,163,184,.18);padding-top:9px;">{escape(spot.get("mood") or spot.get("camera") or "상세 정보 없음")}</div>
+        <div style="font-size:12px;line-height:1.55;color:#cbd5e1;border-top:1px solid rgba(148,163,184,.18);padding-top:9px;">{escape(spot.get("body") or spot.get("lens") or "상세 정보 없음")}</div>
     </div>
     """
 
 
 def record_popup_html(spot: dict[str, Any]) -> str:
     color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
-    link = link_html(spot.get("url") or spot.get("memo"), "OPEN URL")
-    shot_at = spot.get("shot_at") or spot.get("created_at") or "-"
+    link = link_html(spot_url(spot), "OPEN URL")
+    shot_at = spot.get("time") or "-"
     body = spot.get("body") or "-"
-    lens = spot.get("lens") or spot.get("camera") or "-"
-    iso = spot.get("iso") or "-"
-    aperture = spot.get("aperture") or "-"
-    shutter_speed = spot.get("shutter_speed") or "-"
+    lens = spot.get("lens") or "-"
+    comp = spot_comp(spot)
+    iso = comp.get("ISO값") or "-"
+    aperture = comp.get("F값") or "-"
+    shutter_speed = comp.get("셔터스피드") or "-"
+    focal = comp.get("화각") or "-"
     return f"""
     <div style="width:282px;font-family:Inter,Arial,sans-serif;color:#f8fafc;background:#020611;">
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
@@ -1127,7 +1278,8 @@ def record_popup_html(spot: dict[str, Any]) -> str:
             <div><span style="color:#94a3b8;font-weight:800;">ISO</span><br />{escape(iso)}</div>
             <div><span style="color:#94a3b8;font-weight:800;">F</span><br />{escape(aperture)}</div>
             <div><span style="color:#94a3b8;font-weight:800;">SHUTTER</span><br />{escape(shutter_speed)}</div>
-            <div><span style="color:#94a3b8;font-weight:800;">VECTOR</span><br />{compass_label(spot.get("direction", 0))}</div>
+            <div><span style="color:#94a3b8;font-weight:800;">FOCAL</span><br />{escape(focal)}</div>
+            <div><span style="color:#94a3b8;font-weight:800;">VECTOR</span><br />{compass_label(spot_drct(spot))}</div>
         </div>
     </div>
     """
@@ -1135,7 +1287,7 @@ def record_popup_html(spot: dict[str, Any]) -> str:
 
 def add_direction_vector(fmap: folium.Map, spot: dict[str, Any]) -> None:
     color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
-    end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
+    end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot_drct(spot))
     folium.CircleMarker(
         location=(spot["lat"], spot["lng"]),
         radius=10,
@@ -1292,7 +1444,7 @@ class DirectionClickScript(MacroElement):
     def __init__(self, fmap: folium.Map, marker_name: str, spot: dict[str, Any]) -> None:
         super().__init__()
         self._name = "DirectionClickScript"
-        end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot["direction"])
+        end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot_drct(spot))
         self.map_name = fmap.get_name()
         self.marker_name = marker_name
         self.start_lat = f"{float(spot['lat']):.8f}"
@@ -1828,27 +1980,26 @@ def filtered_spots() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for spot in st.session_state.spots:
         weather = spot.get("weather", WEATHER_OPTIONS[0])
-        time_band = spot.get("time_band", TIME_OPTIONS[0])
+        time_value = str(spot.get("time", ""))
+        meridiem = time_meridiem(time_value)
+        comp = spot_comp(spot)
         haystack = " ".join(
             [
                 spot.get("title", ""),
                 weather,
-                time_band,
-                spot.get("mood", ""),
-                spot.get("camera", ""),
-                spot.get("memo", ""),
-                str(spot.get("url", "")),
-                str(spot.get("shot_at", "")),
+                time_value,
+                spot_url(spot),
                 str(spot.get("body", "")),
                 str(spot.get("lens", "")),
-                str(spot.get("iso", "")),
-                str(spot.get("aperture", "")),
-                str(spot.get("shutter_speed", "")),
+                comp.get("F값", ""),
+                comp.get("ISO값", ""),
+                comp.get("셔터스피드", ""),
+                comp.get("화각", ""),
             ]
         ).lower()
         if weather not in weather_filter:
             continue
-        if time_band not in time_filter:
+        if meridiem not in time_filter:
             continue
         if query and query not in haystack:
             continue
@@ -1863,23 +2014,23 @@ def spot_csv(spots: list[dict[str, Any]]) -> bytes:
         fieldnames=[
             "id",
             "title",
+            "URL",
             "lat",
             "lng",
-            "direction",
-            "url",
-            "shot_at",
+            "drct",
+            "weather",
+            "time",
             "body",
             "lens",
-            "iso",
-            "aperture",
-            "shutter_speed",
-            "created_at",
+            "comp",
         ],
     )
     writer.writeheader()
     for spot in spots:
         row = {key: spot.get(key, "") for key in writer.fieldnames}
-        row["url"] = spot.get("url") or spot.get("memo", "")
+        row["URL"] = spot_url(spot)
+        row["drct"] = spot_drct(spot)
+        row["comp"] = json.dumps(spot_comp(spot), ensure_ascii=False)
         writer.writerow(row)
     return out.getvalue().encode("utf-8-sig")
 
@@ -1892,16 +2043,16 @@ def stats(spots: list[dict[str, Any]]) -> tuple[str, str, str, str]:
             WEATHER_OPTIONS,
             key=lambda item: sum(spot.get("weather", WEATHER_OPTIONS[0]) == item for spot in st.session_state.spots),
         )
-        time_band = max(
+        meridiem = max(
             TIME_OPTIONS,
-            key=lambda item: sum(spot.get("time_band", TIME_OPTIONS[0]) == item for spot in st.session_state.spots),
+            key=lambda item: sum(time_meridiem(spot.get("time")) == item for spot in st.session_state.spots),
         )
     else:
         weather = "-"
-        time_band = "-"
+        meridiem = "-"
     active = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
-    direction = compass_label(active["direction"]) if active else "-"
-    return total, visible, f"{weather} · {time_band}", direction
+    direction = compass_label(spot_drct(active)) if active else "-"
+    return total, visible, f"{weather} · {meridiem}", direction
 
 
 def render_header(spots: list[dict[str, Any]]) -> None:
@@ -1933,7 +2084,7 @@ def render_sidebar(spots: list[dict[str, Any]]) -> None:
         st.markdown("### 필터")
         st.session_state.search_query = st.text_input("검색", value=st.session_state.search_query, placeholder="장소, 무드, 메모")
         st.session_state.weather_filter = st.multiselect("날씨", WEATHER_OPTIONS, default=st.session_state.weather_filter)
-        st.session_state.time_filter = st.multiselect("시간대", TIME_OPTIONS, default=st.session_state.time_filter)
+        st.session_state.time_filter = st.multiselect("오전/오후", TIME_OPTIONS, default=st.session_state.time_filter)
 
         st.divider()
         st.markdown("### 스팟")
@@ -1951,8 +2102,8 @@ def render_sidebar(spots: list[dict[str, Any]]) -> None:
                 f"""
                 <div class="pill-row" style="margin-top:-.45rem;margin-bottom:.6rem;">
                     <span class="pill" style="border-color:{color};">{escape(spot["weather"])}</span>
-                    <span class="pill">{escape(spot["time_band"])}</span>
-                    <span class="pill">{compass_label(spot["direction"])}</span>
+                    <span class="pill">{escape(spot.get("time", ""))}</span>
+                    <span class="pill">{compass_label(spot_drct(spot))}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -2000,9 +2151,9 @@ def render_filter_floating(spots: list[dict[str, Any]]) -> None:
             )
             return
 
-        st.text_input("Search", key="search_query", placeholder="name, url, body, lens")
+        st.text_input("Search", key="search_query", placeholder="title, URL, body, lens")
         st.multiselect("Weather", WEATHER_OPTIONS, key="weather_filter")
-        st.multiselect("Time", TIME_OPTIONS, key="time_filter")
+        st.multiselect("AM/PM", TIME_OPTIONS, key="time_filter")
 
         st.divider()
         if not spots:
@@ -2017,13 +2168,13 @@ def render_filter_floating(spots: list[dict[str, Any]]) -> None:
                 st.session_state.form_lng = spot["lng"]
                 st.rerun()
             primary_meta = spot.get("body") or spot.get("weather", WEATHER_OPTIONS[0])
-            secondary_meta = spot.get("lens") or spot.get("time_band", TIME_OPTIONS[0])
+            secondary_meta = spot.get("lens") or spot.get("time", "")
             st.markdown(
                 f"""
                 <div class="pill-row" style="margin-top:-.45rem;margin-bottom:.6rem;">
                     <span class="pill" style="border-color:{color};">{escape(primary_meta)}</span>
                     <span class="pill">{escape(secondary_meta)}</span>
-                    <span class="pill">{compass_label(spot.get("direction", 0))}</span>
+                    <span class="pill">{compass_label(spot_drct(spot))}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -2078,50 +2229,28 @@ def add_spot(
     title: str,
     lat: float,
     lng: float,
-    direction: int,
+    drct: int,
     weather: str | None = None,
-    time_band: str | None = None,
-    mood: str = "",
-    camera: str = "",
-    memo: str = "",
-    uploaded_file: Any = None,
-    *,
-    url: str = "",
-    shot_at: str = "",
+    time_value: str = "",
     body: str = "",
     lens: str = "",
-    iso: str | int = "",
-    aperture: str = "",
-    shutter_speed: str = "",
+    comp: dict[str, str] | None = None,
+    *,
+    url: str = "",
 ) -> None:
-    photo_bytes = None
-    photo_mime = None
-    if uploaded_file is not None:
-        photo_bytes, photo_mime = compress_photo(uploaded_file)
-
     next_id = max([spot["id"] for spot in st.session_state.spots], default=0) + 1
-    url_value = (url or memo).strip()
     spot = {
         "id": next_id,
         "title": title.strip(),
+        "URL": url.strip(),
         "lat": float(lat),
         "lng": float(lng),
-        "direction": int(direction),
+        "drct": int(drct) % 360,
         "weather": weather or WEATHER_OPTIONS[0],
-        "time_band": time_band or TIME_OPTIONS[0],
-        "mood": mood.strip(),
-        "camera": camera.strip(),
-        "memo": url_value,
-        "url": url_value,
-        "shot_at": shot_at.strip(),
         "body": body.strip(),
         "lens": lens.strip(),
-        "iso": str(iso).strip(),
-        "aperture": aperture.strip(),
-        "shutter_speed": shutter_speed.strip(),
-        "photo_bytes": photo_bytes,
-        "photo_mime": photo_mime,
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "time": time_value.strip(),
+        "comp": comp or {"F값": "", "ISO값": "", "셔터스피드": "", "화각": ""},
     }
     st.session_state.spots.append(spot)
     st.session_state.active_spot_id = next_id
@@ -2158,7 +2287,11 @@ def render_form() -> None:
     with st.form("spot_form", clear_on_submit=True):
         title = st.text_input("스팟명", placeholder="예: 유리창 노을 반사 포인트")
 
-        direction = st.slider("촬영 방향", min_value=0, max_value=359, value=45, step=1)
+        direction_raw = st.text_input("촬영 방향", value="45", placeholder="0~359")
+        try:
+            direction = int(float(direction_raw)) % 360
+        except (TypeError, ValueError):
+            direction = 45
         st.markdown(
             f"""
             <div class="pill-row">
@@ -2172,7 +2305,8 @@ def render_form() -> None:
         with col_weather:
             weather = st.selectbox("날씨", WEATHER_OPTIONS, index=0)
         with col_time:
-            time_band = st.selectbox("시간대", TIME_OPTIONS, index=3)
+            time_band = st.selectbox("오전/오후", TIME_OPTIONS, index=1)
+        time_text = st.text_input("시간", value="07:30", placeholder="07:30")
 
         col_mood, col_camera = st.columns(2)
         with col_mood:
@@ -2190,7 +2324,16 @@ def render_form() -> None:
         elif memo.strip() and not is_valid_link(memo):
             st.error("링크는 http:// 또는 https:// 형식으로 입력해주세요.")
         else:
-            add_spot(title, lat, lng, direction, weather, time_band, mood, camera, memo, uploaded_file)
+            add_spot(
+                title,
+                lat,
+                lng,
+                direction,
+                weather=weather,
+                time_value=normalize_time_value(time_text, time_band),
+                lens=camera,
+                url=memo,
+            )
             st.success("스팟이 지도에 추가됐습니다.")
             st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
@@ -2200,92 +2343,105 @@ def render_record_form() -> None:
     lat = float(st.session_state.form_lat)
     lng = float(st.session_state.form_lng)
     coord_label = f"{lat:.6f}, {lng:.6f}"
-    st.markdown(
-        f"""
-        <div class="record-head">
-            <div>
-                <div class="record-title">기록</div>
-                <div class="record-coord">{escape(coord_label)}</div>
+    head_col, close_col = st.columns([1, 0.32])
+    with head_col:
+        st.markdown(
+            f"""
+            <div class="record-head">
+                <div>
+                    <div class="record-title">기록</div>
+                    <div class="record-coord">{escape(coord_label)}</div>
+                </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("닫기", key="close_record_panel", use_container_width=True):
+            """,
+            unsafe_allow_html=True,
+        )
+    with close_col:
+        close_clicked = st.button("닫기", key="close_record_panel", use_container_width=True)
+    if close_clicked:
         st.session_state.right_drawer_open = False
         st.session_state.picking_location = False
         st.rerun()
 
-    direction = render_direction_dial()
+    dial_col, main_col = st.columns([0.42, 1.0])
+    with dial_col:
+        direction = render_direction_dial()
+    with main_col:
+        title = st.text_input("제목", placeholder="촬영 지점 이름", key="record_title")
+        url = st.text_input("URL", placeholder="https://instagram.com/...", key="record_url")
 
-    now = datetime.now()
-    title = st.text_input("제목", placeholder="촬영 지점 이름", key="record_title")
-    url = st.text_input("URL", placeholder="https://example.com", key="record_url")
+    weather_col, time_col = st.columns([0.76, 1.0])
+    with weather_col:
+        weather = st.selectbox("날씨", WEATHER_OPTIONS, key="record_weather")
+    with time_col:
+        time_text = st.text_input("시간", placeholder="07:30", key="record_time_text")
 
-    col_date, col_time = st.columns(2)
-    with col_date:
-        shot_date = st.date_input("촬영 날짜", value=now.date(), key="record_shot_date")
-    with col_time:
-        shot_time = st.time_input("촬영 시간", value=now.time().replace(second=0, microsecond=0), key="record_shot_time")
+    meridiem = st.radio("오전/오후", TIME_OPTIONS, horizontal=True, key="record_meridiem")
+    advanced = st.toggle("ADVANCE", key="record_advance_open")
 
-    weather = st.selectbox("날씨", WEATHER_OPTIONS, key="record_weather")
+    body = ""
+    lens = ""
+    comp = {"F값": "", "ISO값": "", "셔터스피드": "", "화각": ""}
+    shutter_speed = ""
+    if advanced:
+        st.markdown('<p class="record-advanced-note">Body, lens, comp</p>', unsafe_allow_html=True)
+        body_col, lens_col = st.columns(2)
+        with body_col:
+            body = st.text_input("바디", placeholder="Sony A7R V", key="record_body")
+        with lens_col:
+            lens = st.text_input("렌즈", placeholder="35mm F1.4", key="record_lens")
 
-    col_body, col_lens = st.columns(2)
-    with col_body:
-        body = st.text_input("카메라 바디", placeholder="Sony A7R V", key="record_body")
-    with col_lens:
-        lens = st.text_input("렌즈", placeholder="35mm F1.4", key="record_lens")
+        f_col, iso_col = st.columns(2)
+        with f_col:
+            f_value = st.text_input("F값", placeholder="2.8", key="record_f_value")
+        with iso_col:
+            iso_value = st.text_input("ISO값", placeholder="100", key="record_iso_text")
 
-    col_iso, col_f = st.columns(2)
-    with col_iso:
-        iso = st.number_input("ISO", min_value=1, max_value=409600, value=100, step=50, key="record_iso")
-    with col_f:
-        aperture = st.text_input("F", placeholder="2.8", key="record_aperture")
+        long_exposure = st.toggle("장노출", key="record_long_exposure")
+        shutter_col, focal_col = st.columns(2)
+        with shutter_col:
+            if long_exposure:
+                shutter_raw = st.text_input("셔터 N초", placeholder="1", key="record_shutter_seconds_text")
+                shutter_speed = f"{shutter_raw.strip()}s" if shutter_raw.strip() else ""
+            else:
+                shutter_raw = st.text_input("셔터 1/N", placeholder="125", key="record_shutter_denominator_text")
+                shutter_speed = f"1/{shutter_raw.strip()}" if shutter_raw.strip() else ""
+        with focal_col:
+            focal = st.text_input("화각", placeholder="35mm", key="record_focal")
 
-    long_exposure = st.toggle("장노출", key="record_long_exposure")
-    if long_exposure:
-        shutter_seconds = st.number_input(
-            "셔터스피드 N초",
-            min_value=1,
-            max_value=3600,
-            value=1,
-            step=1,
-            key="record_shutter_seconds",
-        )
-        shutter_speed = f"{int(shutter_seconds)}s"
-    else:
-        shutter_denominator = st.number_input(
-            "셔터스피드 1/N",
-            min_value=1,
-            max_value=32000,
-            value=125,
-            step=1,
-            key="record_shutter_denominator",
-        )
-        shutter_speed = f"1/{int(shutter_denominator)}"
+        comp = {
+            "F값": f_value.strip(),
+            "ISO값": iso_value.strip(),
+            "셔터스피드": shutter_speed.strip(),
+            "화각": focal.strip(),
+        }
 
     submitted = st.button("마커 생성", type="primary", use_container_width=True, key="record_submit")
 
     if submitted:
+        clock = normalize_12h_clock(time_text)
         if not title.strip():
             st.error("제목을 입력하세요.")
         elif url.strip() and not is_valid_link(url):
             st.error("URL은 http:// 또는 https:// 형식이어야 합니다.")
+        elif not clock:
+            st.error("시간은 12시간 형식으로 입력하세요. 예: 07:30")
+        elif advanced and st.session_state.record_long_exposure and shutter_raw.strip() and not shutter_raw.strip().isdigit():
+            st.error("장노출 셔터스피드는 초 단위 숫자로 입력하세요.")
+        elif advanced and not st.session_state.record_long_exposure and shutter_raw.strip() and not shutter_raw.strip().isdigit():
+            st.error("셔터스피드 1/N은 숫자로 입력하세요.")
         else:
-            shot_at = datetime.combine(shot_date, shot_time).strftime("%Y-%m-%d %H:%M")
             add_spot(
                 title,
                 lat,
                 lng,
                 direction,
                 weather=weather,
-                url=url,
-                shot_at=shot_at,
+                time_value=f"{meridiem} {clock}",
                 body=body,
                 lens=lens,
-                iso=iso,
-                aperture=aperture,
-                shutter_speed=shutter_speed,
+                comp=comp,
+                url=url,
             )
             st.success("마커를 추가했습니다.")
             st.rerun()
@@ -2300,31 +2456,27 @@ def render_active_detail() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    uri = data_uri(active.get("photo_bytes"), active.get("photo_mime"))
-    if uri:
-        st.image(uri, use_container_width=True)
-
     color = WEATHER_COLORS.get(active["weather"], "#38bdf8")
-    link = link_html(active.get("memo"))
+    link = link_html(spot_url(active))
     st.markdown(
         f"""
         <div class="spot-card">
             <div class="spot-title">
                 <span>{escape(active["title"])}</span>
-                <span style="color:{color};">{compass_label(active["direction"])}</span>
+                <span style="color:{color};">{compass_label(spot_drct(active))}</span>
             </div>
             <div class="pill-row">
                 <span class="pill" style="border-color:{color};">{escape(active["weather"])}</span>
-                <span class="pill" style="border-color:{TIME_COLORS.get(active["time_band"], "#a78bfa")};">{escape(active["time_band"])}</span>
-                <span class="pill">{compass_label(active["direction"])}</span>
-                <span class="pill">{escape(active.get("camera") or "camera -")}</span>
+                <span class="pill" style="border-color:{TIME_COLORS.get(time_meridiem(active.get("time")), "#a78bfa")};">{escape(active.get("time"))}</span>
+                <span class="pill">{compass_label(spot_drct(active))}</span>
+                <span class="pill">{escape(active.get("lens") or "lens -")}</span>
             </div>
-            <p class="muted" style="margin-bottom:0;">{escape(active.get("mood") or "상세 정보 없음")} · {link}</p>
+            <p class="muted" style="margin-bottom:0;">{escape(active.get("body") or "body -")} · {link}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.caption(f"{active['lat']:.6f}, {active['lng']:.6f} · {active.get('created_at', '')}")
+    st.caption(f"{active['lat']:.6f}, {active['lng']:.6f}")
 
     col_focus, col_delete = st.columns(2)
     with col_focus:
@@ -2351,25 +2503,28 @@ def render_record_detail() -> None:
         return
 
     color = WEATHER_COLORS.get(active.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
-    link = link_html(active.get("url") or active.get("memo"), "OPEN URL")
-    shot_at = active.get("shot_at") or active.get("created_at") or "-"
+    link = link_html(spot_url(active), "OPEN URL")
+    shot_at = active.get("time") or "-"
     body = active.get("body") or "-"
-    lens = active.get("lens") or active.get("camera") or "-"
-    iso = active.get("iso") or "-"
-    aperture = active.get("aperture") or "-"
-    shutter_speed = active.get("shutter_speed") or "-"
+    lens = active.get("lens") or "-"
+    comp = spot_comp(active)
+    iso = comp.get("ISO값") or "-"
+    aperture = comp.get("F값") or "-"
+    shutter_speed = comp.get("셔터스피드") or "-"
+    focal = comp.get("화각") or "-"
     st.markdown(
         f"""
         <div class="spot-card">
             <div class="spot-title">
                 <span>{escape(active.get("title"))}</span>
-                <span style="color:{color};">{compass_label(active.get("direction", 0))}</span>
+                <span style="color:{color};">{compass_label(spot_drct(active))}</span>
             </div>
             <div class="pill-row">
                 <span class="pill">{escape(shot_at)}</span>
                 <span class="pill">ISO {escape(iso)}</span>
                 <span class="pill">F {escape(aperture)}</span>
                 <span class="pill">{escape(shutter_speed)}</span>
+                <span class="pill">{escape(focal)}</span>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-top:.75rem;">
                 <div class="pill" style="display:block;">BODY<br /><strong>{escape(body)}</strong></div>
@@ -2380,7 +2535,7 @@ def render_record_detail() -> None:
         """,
         unsafe_allow_html=True,
     )
-    st.caption(f"{active['lat']:.6f}, {active['lng']:.6f} · {active.get('created_at', '')}")
+    st.caption(f"{active['lat']:.6f}, {active['lng']:.6f}")
 
     col_focus, col_delete = st.columns(2)
     with col_focus:
