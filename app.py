@@ -88,7 +88,7 @@ SAMPLE_SPOTS: list[dict[str, Any]] = [
         "URL": "https://www.instagram.com/p/DY53jn5kjft/?igsh=MWl2bGs1Z2E1bjc0ag==",
         "lat": 37.5502,
         "lng": 127.0357,
-        "drct": 62,
+        "drct": 167,
         "weather": "맑음",
         "time": "오후 05:00",
         "body": "Fujifilm X-T30",
