@@ -8,6 +8,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 from datetime import datetime
 from typing import Any
@@ -15,6 +16,48 @@ from urllib.parse import urlparse
 
 import streamlit as st
 import streamlit.components.v1 as components
+
+
+INDEX_HTML_PATH = os.path.join(os.path.dirname(__file__), "index.html")
+COLOR_TOKEN_RE = re.compile(r"--(color-[a-z0-9-]+)\s*:\s*([^;]+);", re.IGNORECASE)
+COLOR_TOKEN_FALLBACKS = {
+    "color-canvas": "#f7f8f6",
+    "color-surface": "#ffffff",
+    "color-surface-soft": "#f0f2f0",
+    "color-border": "#d8ddd8",
+    "color-border-strong": "#b8c0ba",
+    "color-text": "#1f2328",
+    "color-muted": "#69737d",
+    "color-accent": "#0078d4",
+    "color-accent-strong": "#005a9e",
+    "color-accent-soft": "#dcebfa",
+    "color-track": "#e2e7e3",
+    "color-highlight": "rgba(255, 255, 255, 0.92)",
+    "color-shadow": "rgba(31, 35, 40, 0.14)",
+    "color-shadow-soft": "rgba(31, 35, 40, 0.08)",
+}
+
+
+def load_color_tokens() -> dict[str, str]:
+    tokens = COLOR_TOKEN_FALLBACKS.copy()
+    try:
+        with open(INDEX_HTML_PATH, "r", encoding="utf-8") as token_file:
+            token_source = token_file.read()
+    except OSError:
+        return tokens
+    for name, value in COLOR_TOKEN_RE.findall(token_source):
+        if name in tokens:
+            tokens[name] = value.strip()
+    return tokens
+
+
+def ui_color(name: str) -> str:
+    return load_color_tokens().get(name, COLOR_TOKEN_FALLBACKS.get(name, COLOR_TOKEN_FALLBACKS["color-text"]))
+
+
+def css_color_token_block() -> str:
+    tokens = load_color_tokens()
+    return "\n".join(f"            --{name}: {value};" for name, value in tokens.items())
 
 
 def _inside_streamlit() -> bool:
@@ -64,15 +107,15 @@ st.set_page_config(
 WEATHER_OPTIONS = ["맑음", "구름", "비", "눈", "안개"]
 TIME_OPTIONS = ["오전", "오후"]
 WEATHER_COLORS = {
-    "맑음": "#facc15",
-    "구름": "#94a3b8",
-    "비": "#38bdf8",
-    "눈": "#f8fafc",
-    "안개": "#c4b5fd",
+    WEATHER_OPTIONS[0]: ui_color("color-accent"),
+    WEATHER_OPTIONS[1]: ui_color("color-muted"),
+    WEATHER_OPTIONS[2]: ui_color("color-accent-strong"),
+    WEATHER_OPTIONS[3]: ui_color("color-surface"),
+    WEATHER_OPTIONS[4]: ui_color("color-border-strong"),
 }
 TIME_COLORS = {
-    "오전": "#67e8f9",
-    "오후": "#fb7185",
+    TIME_OPTIONS[0]: ui_color("color-accent-strong"),
+    TIME_OPTIONS[1]: ui_color("color-accent"),
 }
 SEOUL_CENTER = (37.5665, 126.9780)
 DIRECTION_DIAL_COMPONENT = components.declare_component(
@@ -129,18 +172,25 @@ SAMPLE_SPOTS: list[dict[str, Any]] = [
 
 def inject_css() -> None:
     st.markdown(
-        """
+        f"""
         <style>
-        :root {
-            color-scheme: dark;
-            --glass-bg: rgba(10, 14, 24, 0.78);
-            --glass-line: rgba(226, 232, 240, 0.18);
-            --glass-text: #f8fafc;
-            --glass-muted: #94a3b8;
-            --glass-cyan: #22d3ee;
-            --glass-rose: #fb7185;
-            --glass-amber: #f59e0b;
-            --glass-green: #34d399;
+        :root {{
+{css_color_token_block()}
+            color-scheme: light;
+            --glass-bg: var(--color-surface);
+            --glass-line: var(--color-border);
+            --glass-text: var(--color-text);
+            --glass-muted: var(--color-muted);
+            --glass-cyan: var(--color-accent);
+            --glass-rose: var(--color-accent-strong);
+            --glass-amber: var(--color-border-strong);
+            --glass-green: var(--color-muted);
+            --panel-black: var(--color-surface);
+            --panel-line: var(--color-border);
+            --neon-cyan: var(--color-accent);
+            --neon-blue: var(--color-accent);
+            --neon-pink: var(--color-accent-strong);
+            --neon-violet: var(--color-border-strong);
             --drawer-width: min(420px, calc(100vw - 62px));
             --drawer-handle: 46px;
             --left-drawer-x: calc(-100% - 1px);
@@ -150,229 +200,199 @@ def inject_css() -> None:
             --record-panel-width: min(330px, calc(100vw - 24px));
             --record-panel-left: calc(100vw - 360px);
             --record-panel-top: 18px;
-            --panel-black: rgba(2, 6, 15, 0.94);
-            --panel-line: rgba(148, 163, 184, 0.26);
-            --neon-cyan: #22d3ee;
-            --neon-blue: #38bdf8;
-            --neon-pink: #fb7185;
-            --neon-violet: #a78bfa;
-            --radius-sm: 6px;
+            --radius-sm: 5px;
             --radius-md: 8px;
             --radius-pill: 999px;
-        }
+        }}
 
-        html, body, [data-testid="stAppViewContainer"], .stApp {
-            background: #060811;
-            color: var(--glass-text);
+        * {{
+            box-sizing: border-box;
+        }}
+
+        html, body, [data-testid="stAppViewContainer"], .stApp {{
+            background: var(--color-canvas) !important;
+            color: var(--color-text) !important;
             overflow: hidden;
-        }
+        }}
 
         [data-testid="stAppViewContainer"],
         section.main,
-        [data-testid="stMain"] {
+        [data-testid="stMain"] {{
             width: 100vw !important;
             max-width: 100vw !important;
             min-width: 100vw !important;
             margin-left: 0 !important;
-        }
+        }}
 
-        .stApp::before {
-            content: "";
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            background:
-                linear-gradient(116deg, transparent 0 18%, rgba(34, 211, 238, 0.14) 18% 18.5%, transparent 18.5% 43%, rgba(251, 113, 133, 0.12) 43% 43.45%, transparent 43.45% 71%, rgba(245, 158, 11, 0.11) 71% 71.5%, transparent 71.5%),
-                linear-gradient(38deg, rgba(52, 211, 153, 0.08) 0 10%, transparent 10% 36%, rgba(167, 139, 250, 0.10) 36% 36.45%, transparent 36.45% 66%, rgba(56, 189, 248, 0.08) 66% 66.4%, transparent 66.4%),
-                #060811;
-            opacity: 0.82;
-            z-index: -2;
-        }
+        .stApp::before,
+        .stApp::after {{
+            content: none !important;
+        }}
 
-        .stApp::after {
-            content: "";
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            background-image:
-                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-                linear-gradient(0deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-            background-size: 140px 140px, 140px 140px;
-            mix-blend-mode: screen;
-            opacity: 0.34;
-            z-index: -1;
-        }
-
-        [data-testid="stHeader"] {
+        [data-testid="stHeader"] {{
             display: none;
-        }
+        }}
 
-        [data-testid="stSidebar"] {
+        .block-container {{
+            width: 100vw;
+            max-width: 100vw;
+            min-height: 100vh;
+            padding: 0 !important;
+        }}
+
+        h1, h2, h3, h4, p, label, span {{
+            color: inherit;
+            letter-spacing: 0;
+        }}
+
+        [data-testid="stSidebar"] {{
             position: fixed;
             inset: 0 auto 0 0;
             width: var(--drawer-width) !important;
             min-width: var(--drawer-width) !important;
             max-width: var(--drawer-width) !important;
             height: 100vh;
-            background:
-                linear-gradient(128deg, rgba(34, 211, 238, 0.14), transparent 18% 52%, rgba(167, 139, 250, 0.11)),
-                repeating-linear-gradient(135deg, transparent 0 18px, rgba(148, 163, 184, 0.045) 18px 19px),
-                var(--panel-black);
-            border-right: 1px solid var(--panel-line);
-            box-shadow: 22px 0 74px rgba(0, 0, 0, 0.66), inset -1px 0 rgba(34, 211, 238, 0.28);
+            background: var(--color-surface);
+            border-right: 1px solid var(--color-border);
+            box-shadow: 18px 0 46px var(--color-shadow);
             transform: translateX(var(--left-drawer-x));
             transition: transform 220ms cubic-bezier(.2, .8, .2, 1), box-shadow 220ms ease;
             z-index: 40;
-        }
+        }}
 
-        [data-testid="stSidebar"]::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 4px;
-            height: 100%;
-            background:
-                linear-gradient(180deg, #22d3ee, #a78bfa 42%, #fb7185 74%, #f59e0b);
-            opacity: 0.82;
-        }
+        [data-testid="stSidebar"]::before {{
+            content: none;
+        }}
 
-        [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
-            padding: 1rem 1rem 1.2rem;
+        [data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+            padding: 1rem;
             overflow-x: hidden;
-        }
+        }}
 
-        .block-container {
-            padding: 0 !important;
-            max-width: 100vw;
-            width: 100vw;
-            min-height: 100vh;
-        }
-
-        h1, h2, h3, h4, p, label, span {
-            letter-spacing: 0;
-        }
-
-        .hero {
-            border: 1px solid rgba(226, 232, 240, 0.16);
-            background:
-                linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(8, 13, 24, 0.76)),
-                linear-gradient(60deg, rgba(34, 211, 238, 0.18), rgba(251, 113, 133, 0.14), rgba(245, 158, 11, 0.10));
-            box-shadow: 0 22px 70px rgba(0, 0, 0, 0.38);
+        .hero,
+        .stat-tile,
+        .glass-panel,
+        .spot-card,
+        .st-key-filter_floating_panel,
+        .st-key-settings_floating_panel,
+        .st-key-right_drawer_panel {{
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
             border-radius: var(--radius-md);
+            box-shadow: 0 14px 36px var(--color-shadow-soft), 0 2px 8px var(--color-shadow-soft);
+            color: var(--color-text);
+        }}
+
+        .hero {{
             padding: 1.05rem 1.2rem;
             margin-bottom: 1rem;
             overflow: hidden;
-        }
+        }}
 
-        .hero-title {
+        .hero-title {{
+            margin: 0;
+            color: var(--color-text);
             font-size: clamp(2rem, 5vw, 4.5rem);
             line-height: 0.98;
             font-weight: 900;
-            color: #ffffff;
-            margin: 0;
-        }
+        }}
 
-        .hero-sub {
-            margin: 0.55rem 0 0;
-            color: #cbd5e1;
+        .hero-sub {{
             max-width: 780px;
+            margin: 0.55rem 0 0;
+            color: var(--color-muted);
             font-size: 1rem;
-        }
+        }}
 
-        .stat-grid {
+        .stat-grid {{
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 0.7rem;
             margin: 0.8rem 0 1rem;
-        }
+        }}
 
-        .stat-tile, .glass-panel, .spot-card {
-            border: 1px solid rgba(226, 232, 240, 0.18);
-            background:
-                linear-gradient(132deg, rgba(34, 211, 238, 0.10), transparent 24% 58%, rgba(251, 113, 133, 0.09)),
-                rgba(2, 6, 14, 0.86);
-            backdrop-filter: blur(20px) saturate(1.15);
-            border-radius: var(--radius-md);
-            box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-        }
-
-        .stat-tile {
+        .stat-tile {{
             min-height: 88px;
             padding: 0.9rem;
-        }
+        }}
 
-        .stat-label {
-            color: var(--glass-muted);
-            font-size: 0.76rem;
+        .stat-label,
+        .muted,
+        .record-advanced-note,
+        .filter-mini {{
+            color: var(--color-muted);
+        }}
+
+        .stat-label {{
             margin-bottom: 0.35rem;
-        }
+            font-size: 0.76rem;
+        }}
 
-        .stat-value {
-            font-size: 1.45rem;
+        .stat-value,
+        .spot-title,
+        .record-title,
+        .filter-mini strong,
+        [data-testid="stSidebar"] h3,
+        .st-key-right_drawer_panel h3 {{
+            color: var(--color-text);
             font-weight: 850;
-            color: #ffffff;
-            line-height: 1.15;
-            overflow-wrap: anywhere;
-        }
+        }}
 
-        .glass-panel {
+        .stat-value {{
+            overflow-wrap: anywhere;
+            font-size: 1.45rem;
+            line-height: 1.15;
+        }}
+
+        .glass-panel {{
+            position: relative;
             padding: 1rem;
             margin-bottom: 1rem;
-            position: relative;
-        }
+        }}
 
-        .glass-panel::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            background:
-                linear-gradient(115deg, transparent 0 34%, rgba(34, 211, 238, 0.16) 34% 34.35%, transparent 34.35% 68%, rgba(251, 113, 133, 0.14) 68% 68.35%, transparent 68.35%),
-                linear-gradient(34deg, transparent 0 48%, rgba(245, 158, 11, 0.12) 48% 48.35%, transparent 48.35%);
-        }
+        .glass-panel::before,
+        .st-key-right_drawer_panel::before {{
+            content: none;
+        }}
 
-        .spot-card {
+        .spot-card {{
             padding: 0.85rem;
             margin-bottom: 0.75rem;
-        }
+        }}
 
-        .spot-title {
+        .spot-title {{
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 0.75rem;
-            color: #ffffff;
-            font-weight: 850;
             font-size: 1rem;
-        }
+        }}
 
-        .pill-row {
+        .pill-row {{
             display: flex;
             gap: 0.35rem;
             flex-wrap: wrap;
             margin-top: 0.55rem;
-        }
+        }}
 
-        .pill {
+        .pill {{
             display: inline-flex;
             align-items: center;
             min-height: 26px;
             padding: 0.2rem 0.48rem;
             border-radius: var(--radius-pill);
-            border: 1px solid rgba(226, 232, 240, 0.20);
-            color: #e2e8f0;
-            background: rgba(3, 7, 18, 0.78);
+            border: 1px solid var(--color-border);
+            background: var(--color-surface-soft);
+            color: var(--color-text);
             font-size: 0.78rem;
-        }
+        }}
 
-        .muted {
-            color: #94a3b8;
+        .muted {{
             font-size: 0.88rem;
             line-height: 1.6;
-        }
+        }}
 
-        .map-wrap {
+        .map-wrap {{
             position: absolute;
             width: 0;
             height: 0;
@@ -382,22 +402,22 @@ def inject_css() -> None:
             padding: 0;
             overflow: visible;
             pointer-events: none;
-        }
+        }}
 
         .map-wrap iframe,
         div[data-testid="stHorizontalBlock"]:has(.map-wrap) iframe,
-        iframe[title^="streamlit_folium"] {
+        iframe[title^="streamlit_folium"] {{
             position: fixed;
             inset: 0;
             width: 100vw !important;
             height: 100vh !important;
-            border-radius: 0;
             border: 0;
+            border-radius: 0;
             display: block;
             z-index: 1;
-        }
+        }}
 
-        .st-key-right_drawer_panel {
+        .st-key-right_drawer_panel {{
             position: fixed;
             left: 0;
             top: 0;
@@ -409,12 +429,6 @@ def inject_css() -> None:
             padding: 0.58rem;
             overflow-y: auto;
             overflow-x: hidden;
-            background:
-                linear-gradient(232deg, rgba(251, 113, 133, 0.13), transparent 20% 55%, rgba(34, 211, 238, 0.12)),
-                repeating-linear-gradient(45deg, transparent 0 18px, rgba(148, 163, 184, 0.045) 18px 19px),
-                var(--panel-black);
-            border: 1px solid var(--panel-line);
-            box-shadow: 0 22px 64px rgba(0, 0, 0, 0.56), inset 0 0 0 1px rgba(255,255,255,0.06);
             transform: translate3d(
                 min(calc(100vw - var(--record-panel-width) - 16px), max(16px, var(--record-panel-left))),
                 min(calc(100vh - 78px), max(12px, var(--record-panel-top))),
@@ -424,108 +438,93 @@ def inject_css() -> None:
             will-change: transform, opacity;
             contain: layout paint style;
             z-index: 72;
-            border-radius: var(--radius-md);
-        }
+        }}
 
-        .st-key-right_drawer_panel::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: calc(100% - 18px);
-            border-radius: 999px;
-            margin-top: 9px;
-            background:
-                linear-gradient(180deg, #fb7185, #a78bfa 38%, #22d3ee 70%, #34d399);
-            opacity: 0.82;
-        }
-
-        .st-key-right_drawer_panel .glass-panel {
+        .st-key-right_drawer_panel .glass-panel {{
             margin-bottom: 0;
             padding: 0;
             border: 0;
             background: transparent;
             box-shadow: none;
-            backdrop-filter: none;
-        }
+        }}
 
-        .record-head {
+        .record-head {{
             display: grid;
             grid-template-columns: 1fr auto;
             gap: 0.55rem;
             align-items: center;
             margin-bottom: 0.35rem;
-        }
+        }}
 
-        .record-title {
-            color: var(--glass-text);
+        .record-title {{
             font-size: 1rem;
-            font-weight: 900;
             line-height: 1.15;
-        }
+            font-weight: 900;
+        }}
 
-        .record-coord {
+        .record-coord,
+        .filter-count {{
             display: inline-flex;
             align-items: center;
-            max-width: 100%;
             min-height: 24px;
             padding: 0.18rem 0.46rem;
             border-radius: var(--radius-pill);
-            border: 1px solid rgba(34, 211, 238, 0.34);
-            color: #67e8f9;
-            background: rgba(3, 7, 18, 0.68);
+            border: 1px solid var(--color-border);
+            background: var(--color-surface-soft);
+            color: var(--color-accent-strong);
             font: 800 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        }
+        }}
 
-        .st-key-right_drawer_panel [data-testid="stVerticalBlock"] {
+        .record-coord {{
+            max-width: 100%;
+        }}
+
+        .st-key-right_drawer_panel [data-testid="stVerticalBlock"] {{
             gap: 0.35rem;
-        }
+        }}
 
-        .st-key-right_drawer_panel [data-testid="stHorizontalBlock"] {
+        .st-key-right_drawer_panel [data-testid="stHorizontalBlock"] {{
             gap: 0.45rem;
-        }
+        }}
 
-        .st-key-right_drawer_panel label {
+        .st-key-right_drawer_panel label {{
+            margin-bottom: 0.1rem !important;
             font-size: 0.74rem !important;
             line-height: 1.2 !important;
-            margin-bottom: 0.1rem !important;
-        }
+        }}
 
         .st-key-right_drawer_panel input,
-        .st-key-right_drawer_panel [data-baseweb="select"] > div {
+        .st-key-right_drawer_panel [data-baseweb="select"] > div {{
             min-height: 34px !important;
             font-size: 0.84rem !important;
-        }
+        }}
 
         .st-key-right_drawer_panel .stButton > button,
         .st-key-right_drawer_panel [data-testid="stBaseButton-secondary"],
-        .st-key-right_drawer_panel [data-testid="stBaseButton-primary"] {
+        .st-key-right_drawer_panel [data-testid="stBaseButton-primary"] {{
             min-height: 34px !important;
             padding: 0.25rem 0.55rem !important;
             font-size: 0.82rem !important;
-        }
+        }}
 
-        .record-dial-caption {
+        .record-dial-caption {{
             margin: -0.15rem 0 0;
             text-align: center;
-            color: #67e8f9;
+            color: var(--color-accent-strong);
             font: 900 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        }
+        }}
 
-        .record-time-row {
+        .record-time-row {{
             margin-top: -0.1rem;
-        }
+        }}
 
-        .record-advanced-note {
+        .record-advanced-note {{
             margin: 0.1rem 0 0;
-            color: var(--glass-muted);
             font-size: 0.74rem;
             line-height: 1.35;
-        }
+        }}
 
-
-        .st-key-filter_floating_panel {
+        .st-key-filter_floating_panel {{
             position: fixed;
             left: 18px;
             bottom: 18px;
@@ -535,99 +534,69 @@ def inject_css() -> None:
             overflow-x: hidden;
             z-index: 46;
             padding: 0.78rem;
-            background:
-                linear-gradient(132deg, rgba(34, 211, 238, 0.16), transparent 22% 58%, rgba(251, 113, 133, 0.12)),
-                repeating-linear-gradient(135deg, transparent 0 16px, rgba(248, 250, 252, 0.045) 16px 17px),
-                rgba(2, 6, 15, 0.92);
-            border: 1px solid rgba(248, 250, 252, 0.24);
-            box-shadow:
-                0 20px 56px rgba(0, 0, 0, 0.58),
-                inset 0 0 0 1px rgba(255, 255, 255, 0.045),
-                inset 4px 0 rgba(34, 211, 238, 0.42);
-            backdrop-filter: blur(18px) saturate(1.18);
-            border-radius: var(--radius-md);
-        }
+        }}
 
-        .filter-head {
+        .filter-head {{
             display: grid;
             grid-template-columns: 1fr auto;
             gap: 0.65rem;
             align-items: center;
             margin-bottom: 0.65rem;
-        }
+        }}
 
-        .filter-count {
+        .filter-count {{
             min-width: 68px;
+            justify-content: center;
             padding: 0.52rem 0.58rem;
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            background: rgba(3, 7, 18, 0.78);
-            color: #e2e8f0;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             font-size: 0.78rem;
             font-weight: 900;
-            text-align: center;
-            border-radius: var(--radius-pill);
-        }
+        }}
 
-        .filter-mini {
-            border-top: 1px solid rgba(148, 163, 184, 0.18);
+        .filter-mini {{
+            border-top: 1px solid var(--color-border);
             padding-top: 0.62rem;
-            color: #cbd5e1;
             font-size: 0.82rem;
             line-height: 1.45;
-            border-radius: var(--radius-md);
-        }
+        }}
 
-        .st-key-settings_floating_panel {
+        .st-key-settings_floating_panel {{
             position: fixed;
             top: 18px;
             right: 18px;
             width: min(230px, calc(100vw - 36px)) !important;
             z-index: 82;
             padding: 0.58rem;
-            background:
-                linear-gradient(132deg, rgba(251, 113, 133, 0.15), transparent 30% 64%, rgba(34, 211, 238, 0.13)),
-                rgba(2, 6, 15, 0.92);
-            border: 1px solid rgba(248, 250, 252, 0.24);
-            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.52), inset 0 0 0 1px rgba(255, 255, 255, 0.045);
-            backdrop-filter: blur(18px) saturate(1.18);
-            border-radius: var(--radius-md);
-        }
+        }}
 
-        .st-key-settings_floating_panel [data-testid="stMarkdownContainer"] p {
+        .st-key-settings_floating_panel [data-testid="stMarkdownContainer"] p {{
             margin: 0;
-        }
-
-        .filter-mini strong {
-            color: #f8fafc;
-            font-weight: 900;
-        }
+        }}
 
         .drawer-handle,
         .st-key-left_drawer_handle,
-        .st-key-right_drawer_handle {
+        .st-key-right_drawer_handle {{
             position: fixed;
             top: 50%;
             width: var(--drawer-handle) !important;
             min-width: var(--drawer-handle) !important;
             transform: translateY(-50%);
             z-index: 70;
-            filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.52));
-        }
+            filter: drop-shadow(0 14px 22px var(--color-shadow-soft));
+        }}
 
         .drawer-handle-left,
-        .st-key-left_drawer_handle {
+        .st-key-left_drawer_handle {{
             left: var(--left-handle-left);
-        }
+        }}
 
         .drawer-handle-right,
-        .st-key-right_drawer_handle {
+        .st-key-right_drawer_handle {{
             right: var(--right-handle-right);
-        }
+        }}
 
         .drawer-handle button,
         .st-key-left_drawer_handle button,
-        .st-key-right_drawer_handle button {
+        .st-key-right_drawer_handle button {{
             width: var(--drawer-handle) !important;
             min-width: var(--drawer-handle) !important;
             height: 148px;
@@ -639,321 +608,148 @@ def inject_css() -> None:
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             font-size: 0.72rem;
             font-weight: 900;
-            color: #f8fafc !important;
-            clip-path: none;
-            background:
-                linear-gradient(180deg, rgba(34, 211, 238, 0.30), transparent 36% 64%, rgba(251, 113, 133, 0.26)),
-                linear-gradient(90deg, rgba(255,255,255,0.06), transparent),
-                rgba(2, 6, 15, 0.96) !important;
-            border: 1px solid rgba(226, 232, 240, 0.34) !important;
-            box-shadow:
-                0 0 0 1px rgba(34, 211, 238, 0.16),
-                0 18px 44px rgba(0, 0, 0, 0.52),
-                inset 0 0 24px rgba(34, 211, 238, 0.10);
-        }
+            color: var(--color-text) !important;
+            background: var(--color-surface) !important;
+            border: 1px solid var(--color-border) !important;
+            box-shadow: 0 12px 28px var(--color-shadow-soft);
+        }}
 
-        .st-key-left_drawer_handle button {
-            border-left: 3px solid var(--neon-cyan) !important;
-        }
+        .st-key-left_drawer_handle button {{
+            border-left: 3px solid var(--color-accent) !important;
+        }}
 
-        .st-key-right_drawer_handle button {
-            border-right: 3px solid var(--neon-pink) !important;
-            clip-path: none;
-        }
+        .st-key-right_drawer_handle button {{
+            border-right: 3px solid var(--color-accent-strong) !important;
+        }}
 
         .drawer-handle button:hover,
         .st-key-left_drawer_handle button:hover,
-        .st-key-right_drawer_handle button:hover {
-            border-color: rgba(34, 211, 238, 0.86) !important;
-            color: #ffffff !important;
-            background:
-                linear-gradient(180deg, rgba(34, 211, 238, 0.40), transparent 36% 64%, rgba(251, 113, 133, 0.36)),
-                linear-gradient(90deg, rgba(255,255,255,0.08), transparent),
-                rgba(2, 6, 14, 0.98) !important;
-        }
+        .st-key-right_drawer_handle button:hover,
+        .stButton > button:hover,
+        .stDownloadButton > button:hover {{
+            border-color: var(--color-accent) !important;
+            color: var(--color-accent-strong) !important;
+            background: var(--color-surface-soft) !important;
+        }}
 
         .stButton > button,
         .stDownloadButton > button,
         [data-testid="stBaseButton-secondary"],
-        [data-testid="stBaseButton-primary"] {
-            border-radius: var(--radius-md);
-            border: 1px solid rgba(226, 232, 240, 0.22);
-            background:
-                linear-gradient(115deg, rgba(34, 211, 238, 0.12), transparent 40% 62%, rgba(251, 113, 133, 0.12)),
-                rgba(3, 7, 18, 0.86);
-            color: #f8fafc;
+        [data-testid="stBaseButton-primary"] {{
             min-height: 42px;
-        }
+            border-radius: var(--radius-md) !important;
+            border: 1px solid var(--color-border) !important;
+            background: var(--color-surface) !important;
+            color: var(--color-text) !important;
+            box-shadow: 0 1px 2px var(--color-shadow-soft);
+        }}
+
+        [data-testid="stBaseButton-primary"] {{
+            border-color: var(--color-accent-strong) !important;
+            background: var(--color-accent) !important;
+            color: var(--color-surface) !important;
+            font-weight: 850;
+        }}
 
         [data-testid="stSidebar"] h3,
-        .st-key-right_drawer_panel h3 {
-            color: #f8fafc;
-            font-weight: 900;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+        .st-key-right_drawer_panel h3 {{
+            border-bottom: 1px solid var(--color-border);
             padding-bottom: 0.45rem;
-        }
+        }}
 
         [data-testid="stSidebar"] label,
-        .st-key-right_drawer_panel label {
-            color: #cbd5e1 !important;
+        .st-key-right_drawer_panel label,
+        label {{
+            color: var(--color-muted) !important;
             font-weight: 750;
-        }
+        }}
 
-        .stButton > button:hover,
-        .stDownloadButton > button:hover {
-            border-color: rgba(34, 211, 238, 0.7);
-            color: #ffffff;
-        }
-
-        [data-testid="stBaseButton-primary"] {
-            background:
-                linear-gradient(90deg, rgba(34, 211, 238, 0.34), rgba(251, 113, 133, 0.30)),
-                rgba(3, 7, 18, 0.96);
-            color: #ffffff;
-            font-weight: 850;
-        }
-
-        input, textarea, [data-baseweb="select"] > div {
+        input,
+        textarea,
+        [data-baseweb="select"] > div {{
             border-radius: var(--radius-sm) !important;
-            background: rgba(2, 6, 17, 0.78) !important;
-            border-color: rgba(148, 163, 184, 0.24) !important;
-            color: #f8fafc !important;
-            box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.04) !important;
-        }
+            background: var(--color-surface) !important;
+            border-color: var(--color-border) !important;
+            color: var(--color-text) !important;
+            box-shadow: inset 0 0 0 1px var(--color-highlight) !important;
+        }}
 
-        input:focus, textarea:focus {
-            border-color: rgba(34, 211, 238, 0.72) !important;
-            box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.28) !important;
-        }
+        input:focus,
+        textarea:focus {{
+            border-color: var(--color-accent) !important;
+            box-shadow: 0 0 0 2px var(--color-accent-soft) !important;
+        }}
 
-        div[data-testid="stFileUploaderDropzone"] {
+        [data-baseweb="select"] *,
+        [data-testid="stMarkdownContainer"],
+        [data-testid="stCaptionContainer"] {{
+            color: var(--color-text);
+        }}
+
+        div[data-testid="stFileUploaderDropzone"] {{
             border-radius: var(--radius-md);
-            border-color: rgba(34, 211, 238, 0.36);
-            background: rgba(3, 7, 18, 0.72);
-        }
+            border-color: var(--color-border);
+            background: var(--color-surface-soft);
+        }}
 
         .leaflet-popup-content-wrapper,
-        .leaflet-popup-tip {
-            background:
-                linear-gradient(135deg, rgba(255,255,255,0.08), transparent 24% 72%, rgba(34,211,238,0.08)),
-                rgba(2, 6, 17, 0.98);
-            color: #f8fafc;
-            border: 1px solid rgba(248, 250, 252, 0.34);
-            box-shadow: 0 24px 56px rgba(0, 0, 0, 0.62), inset 0 0 0 1px rgba(255,255,255,0.08);
+        .leaflet-popup-tip {{
+            background: var(--color-surface) !important;
+            color: var(--color-text) !important;
+            border: 1px solid var(--color-border);
+            box-shadow: 0 18px 42px var(--color-shadow);
             border-radius: var(--radius-md);
-        }
+        }}
 
-        .leaflet-popup-content {
+        .leaflet-popup-content {{
             margin: 12px;
-        }
+        }}
 
-        .leaflet-popup-close-button {
-            color: #e2e8f0 !important;
+        .leaflet-popup-close-button {{
+            color: var(--color-muted) !important;
             font-size: 20px !important;
             font-weight: 900 !important;
-            text-shadow: 0 0 14px rgba(34, 211, 238, 0.66);
-        }
+            text-shadow: none !important;
+        }}
 
-        .leaflet-popup-close-button:hover {
-            color: #ffffff !important;
+        .leaflet-popup-close-button:hover {{
+            color: var(--color-text) !important;
             background: transparent !important;
-        }
+        }}
 
-        @media (max-width: 900px) {
-            .stat-grid {
+        @media (max-width: 900px) {{
+            .stat-grid {{
                 grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-            .hero {
-                padding: 0.95rem;
-            }
-        }
+            }}
 
-        @media (max-width: 520px) {
-            .stat-grid {
+            .hero {{
+                padding: 0.95rem;
+            }}
+        }}
+
+        @media (max-width: 520px) {{
+            .stat-grid {{
                 grid-template-columns: 1fr;
-            }
-            .hero-title {
+            }}
+
+            .hero-title {{
                 font-size: 2.2rem;
-            }
-            .st-key-filter_floating_panel {
+            }}
+
+            .st-key-filter_floating_panel {{
                 left: 10px;
                 right: 10px;
                 bottom: 10px;
                 width: auto !important;
                 max-height: 56vh;
                 padding: 0.68rem;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.session_state.get("theme_mode", "dark") == "light":
-        st.markdown(
-            """
-            <style>
-            :root {
-                color-scheme: light;
-                --glass-bg: rgba(255, 255, 255, 0.84);
-                --glass-line: rgba(15, 23, 42, 0.16);
-                --glass-text: #0f172a;
-                --glass-muted: #64748b;
-                --panel-black: rgba(255, 255, 255, 0.94);
-                --panel-line: rgba(15, 23, 42, 0.14);
-            }
-
-            html, body, [data-testid="stAppViewContainer"], .stApp {
-                background: #f4f7fb;
-                color: #0f172a;
-            }
-
-            .stApp::before {
-                background:
-                    linear-gradient(116deg, transparent 0 18%, rgba(8, 145, 178, 0.12) 18% 18.5%, transparent 18.5% 43%, rgba(244, 63, 94, 0.10) 43% 43.45%, transparent 43.45% 71%, rgba(217, 119, 6, 0.10) 71% 71.5%, transparent 71.5%),
-                    linear-gradient(38deg, rgba(5, 150, 105, 0.08) 0 10%, transparent 10% 36%, rgba(124, 58, 237, 0.08) 36% 36.45%, transparent 36.45% 66%, rgba(14, 165, 233, 0.08) 66% 66.4%, transparent 66.4%),
-                    #f4f7fb;
-                opacity: 0.95;
-            }
-
-            .stApp::after {
-                background-image:
-                    linear-gradient(90deg, rgba(15, 23, 42, 0.045) 1px, transparent 1px),
-                    linear-gradient(0deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
-                mix-blend-mode: multiply;
-                opacity: 0.28;
-            }
-
-            [data-testid="stSidebar"],
-            .st-key-right_drawer_panel {
-                background:
-                    linear-gradient(128deg, rgba(8, 145, 178, 0.10), transparent 22% 56%, rgba(124, 58, 237, 0.08)),
-                    rgba(255, 255, 255, 0.94);
-                border-color: rgba(15, 23, 42, 0.14);
-                box-shadow: 18px 0 54px rgba(15, 23, 42, 0.16), inset -1px 0 rgba(8, 145, 178, 0.16);
-            }
-
-            .st-key-right_drawer_panel {
-                box-shadow: -18px 0 54px rgba(15, 23, 42, 0.16), inset 1px 0 rgba(244, 63, 94, 0.14);
-            }
-
-            .hero,
-            .stat-tile,
-            .glass-panel,
-            .spot-card,
-            .st-key-filter_floating_panel,
-            .st-key-settings_floating_panel {
-                background:
-                    linear-gradient(132deg, rgba(8, 145, 178, 0.09), transparent 28% 62%, rgba(244, 63, 94, 0.07)),
-                    rgba(255, 255, 255, 0.86);
-                border-color: rgba(15, 23, 42, 0.14);
-                box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.56);
-            }
-
-            .glass-panel::before {
-                opacity: 0.34;
-            }
-
-            .hero-title,
-            .stat-value,
-            .spot-title,
-            .filter-mini strong,
-            [data-testid="stSidebar"] h3,
-            .st-key-right_drawer_panel h3 {
-                color: #0f172a;
-            }
-
-            .hero-sub,
-            .muted,
-            .filter-mini,
-            [data-testid="stSidebar"] label,
-            .st-key-right_drawer_panel label {
-                color: #475569 !important;
-            }
-
-            .pill,
-            .filter-count {
-                color: #0f172a;
-                background: rgba(255, 255, 255, 0.74);
-                border-color: rgba(15, 23, 42, 0.16);
-            }
-
-            .drawer-handle button,
-            .st-key-left_drawer_handle button,
-            .st-key-right_drawer_handle button,
-            .stButton > button,
-            .stDownloadButton > button,
-            [data-testid="stBaseButton-secondary"] {
-                color: #0f172a !important;
-                background:
-                    linear-gradient(115deg, rgba(8, 145, 178, 0.10), transparent 42% 62%, rgba(244, 63, 94, 0.10)),
-                    rgba(255, 255, 255, 0.86) !important;
-                border-color: rgba(15, 23, 42, 0.18) !important;
-            }
-
-            [data-testid="stBaseButton-primary"] {
-                color: #ffffff !important;
-                background:
-                    linear-gradient(90deg, rgba(8, 145, 178, 0.78), rgba(244, 63, 94, 0.70)),
-                    #0891b2 !important;
-            }
-
-            input,
-            textarea,
-            [data-baseweb="select"] > div {
-                color: #0f172a !important;
-                background: rgba(255, 255, 255, 0.86) !important;
-                border-color: rgba(15, 23, 42, 0.18) !important;
-            }
-
-            input:focus,
-            textarea:focus {
-                border-color: rgba(8, 145, 178, 0.72) !important;
-                box-shadow: 0 0 0 1px rgba(8, 145, 178, 0.24) !important;
-            }
-
-            div[data-testid="stFileUploaderDropzone"] {
-                background: rgba(255, 255, 255, 0.76);
-                border-color: rgba(8, 145, 178, 0.34);
-            }
-
-            .leaflet-popup-content-wrapper,
-            .leaflet-popup-tip {
-                background:
-                    linear-gradient(135deg, rgba(15,23,42,0.04), transparent 24% 72%, rgba(8,145,178,0.06)),
-                    rgba(255, 255, 255, 0.98);
-                color: #0f172a;
-                border-color: rgba(15, 23, 42, 0.18);
-                box-shadow: 0 20px 48px rgba(15, 23, 42, 0.16);
-            }
-
-            .leaflet-popup-close-button {
-                color: #0f172a !important;
-                text-shadow: none;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-    left_open = bool(st.session_state.get("left_drawer_open", False))
-    right_open = bool(st.session_state.get("right_drawer_open", False))
-    record_left = int(st.session_state.get("record_panel_x", 24)) + 18
-    record_top = int(st.session_state.get("record_panel_y", 24)) + 18
-    st.markdown(
-        f"""
-        <style>
-        :root {{
-            --left-drawer-x: {"0" if left_open else "calc(-100% - 1px)"};
-            --right-drawer-x: {"0" if right_open else "calc(100% + 1px)"};
-            --left-handle-left: {"var(--drawer-width)" if left_open else "0px"};
-            --right-handle-right: {"var(--drawer-width)" if right_open else "0px"};
-            --record-panel-left: {record_left}px;
-            --record-panel-top: {record_top}px;
+            }}
         }}
         </style>
         """,
         unsafe_allow_html=True,
     )
-
+    return
 
 def inject_layout_vars() -> None:
     left_open = bool(st.session_state.get("left_drawer_open", False))
@@ -998,7 +794,6 @@ def ensure_state() -> None:
         "picking_location": False,
         "filter_open": False,
         "settings_open": False,
-        "theme_mode": "dark",
         "last_context_click_nonce": None,
         "last_panel_close_nonce": None,
         "record_direction": 45,
@@ -1226,13 +1021,15 @@ def is_valid_link(value: str | None) -> bool:
 
 def link_html(value: str | None, label: str = "링크 열기") -> str:
     if not is_valid_link(value):
-        return '<span style="color:#64748b;">링크 없음</span>'
+        return f'<span style="color:{ui_color("color-muted")};">링크 없음</span>'
     url = escape(str(value).strip())
     text = escape(label)
+    accent = ui_color("color-accent-strong")
+    accent_soft = ui_color("color-accent-soft")
     return (
         f'<a href="{url}" target="_blank" rel="noopener noreferrer" '
-        'style="color:#67e8f9;text-decoration:none;font-weight:900;'
-        'border-bottom:1px solid rgba(103,232,249,.45);">'
+        f'style="color:{accent};text-decoration:none;font-weight:900;'
+        f'border-bottom:1px solid {accent_soft};">'
         f"{text}</a>"
     )
 
@@ -1260,40 +1057,50 @@ def data_uri(photo_bytes: bytes | None, mime: str | None) -> str | None:
 
 
 def popup_html(spot: dict[str, Any]) -> str:
-    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
+    surface = ui_color("color-surface")
+    surface_soft = ui_color("color-surface-soft")
+    border = ui_color("color-border")
+    text = ui_color("color-text")
+    muted = ui_color("color-muted")
     img = data_uri(spot.get("photo_bytes"), spot.get("photo_mime"))
     image_html = ""
     if img:
         image_html = (
             f'<img src="{img}" style="width:100%;max-height:150px;object-fit:cover;'
-            'margin-bottom:10px;border:1px solid rgba(148,163,184,0.24);" />'
+            f'margin-bottom:10px;border:1px solid {border};border-radius:8px;" />'
         )
     link = link_html(spot_url(spot))
     return f"""
-    <div style="width:282px;font-family:Inter,Arial,sans-serif;color:#f8fafc;background:#020611;">
+    <div style="width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};">
         {image_html}
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
-            <div style="font-size:12px;color:#94a3b8;font-weight:800;text-transform:uppercase;">SPOT NODE</div>
-            <div style="font-size:16px;font-weight:900;line-height:1.25;color:#ffffff;">{escape(spot["title"])}</div>
+            <div style="font-size:12px;color:{muted};font-weight:800;text-transform:uppercase;">SPOT NODE</div>
+            <div style="font-size:16px;font-weight:900;line-height:1.25;color:{text};">{escape(spot["title"])}</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-            <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
-                <div style="font-size:10px;color:#94a3b8;font-weight:800;">LINK</div>
+            <div style="border:1px solid {border};background:{surface_soft};padding:8px;border-radius:8px;">
+                <div style="font-size:10px;color:{muted};font-weight:800;">LINK</div>
                 <div style="font-size:12px;margin-top:8px;">{link}</div>
             </div>
-            <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
-                <div style="font-size:10px;color:#94a3b8;font-weight:800;">CONDITION</div>
-                <div style="font-size:12px;color:#f8fafc;font-weight:850;margin-top:4px;">{escape(spot.get("weather"))}</div>
-                <div style="font-size:12px;color:#cbd5e1;font-weight:750;">{escape(spot.get("time"))}</div>
+            <div style="border:1px solid {border};background:{surface_soft};padding:8px;border-radius:8px;">
+                <div style="font-size:10px;color:{muted};font-weight:800;">CONDITION</div>
+                <div style="font-size:12px;color:{text};font-weight:850;margin-top:4px;">{escape(spot.get("weather"))}</div>
+                <div style="font-size:12px;color:{muted};font-weight:750;">{escape(spot.get("time"))}</div>
             </div>
         </div>
-        <div style="font-size:12px;line-height:1.55;color:#cbd5e1;border-top:1px solid rgba(148,163,184,.18);padding-top:9px;">{escape(spot.get("body") or spot.get("lens") or "상세 정보 없음")}</div>
+        <div style="font-size:12px;line-height:1.55;color:{muted};border-top:1px solid {border};padding-top:9px;">{escape(spot.get("body") or spot.get("lens") or "상세 정보 없음")}</div>
     </div>
     """
 
 
 def record_popup_html(spot: dict[str, Any]) -> str:
-    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
+    surface = ui_color("color-surface")
+    surface_soft = ui_color("color-surface-soft")
+    border = ui_color("color-border")
+    text = ui_color("color-text")
+    muted = ui_color("color-muted")
     link = link_html(spot_url(spot), "OPEN URL")
     shot_date = spot.get("date") or "-"
     shot_time = spot.get("time") or "-"
@@ -1302,30 +1109,30 @@ def record_popup_html(spot: dict[str, Any]) -> str:
     if items:
         advanced_html = (
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;'
-            'font-size:12px;line-height:1.45;color:#cbd5e1;'
-            'border-top:1px solid rgba(148,163,184,.18);padding-top:9px;">'
+            f'font-size:12px;line-height:1.45;color:{muted};'
+            f'border-top:1px solid {border};padding-top:9px;">'
             + "".join(
-                f'<div><span style="color:#94a3b8;font-weight:800;">{escape(label)}</span><br />{escape(value)}</div>'
+                f'<div><span style="color:{muted};font-weight:800;">{escape(label)}</span><br />{escape(value)}</div>'
                 for label, value in items
             )
             + "</div>"
         )
     return f"""
-    <div style="width:282px;font-family:Inter,Arial,sans-serif;color:#f8fafc;background:#020611;">
+    <div style="width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};">
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
-            <div style="font-size:12px;color:#94a3b8;font-weight:800;text-transform:uppercase;">SPOT NODE</div>
-            <div style="font-size:16px;font-weight:900;line-height:1.25;color:#ffffff;">{escape(spot.get("title"))}</div>
+            <div style="font-size:12px;color:{muted};font-weight:800;text-transform:uppercase;">SPOT NODE</div>
+            <div style="font-size:16px;font-weight:900;line-height:1.25;color:{text};">{escape(spot.get("title"))}</div>
             <div style="font-size:12px;color:{color};font-weight:900;margin-top:4px;">{compass_label(spot_drct(spot))}</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-            <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
-                <div style="font-size:10px;color:#94a3b8;font-weight:800;">URL</div>
+            <div style="border:1px solid {border};background:{surface_soft};padding:8px;border-radius:8px;">
+                <div style="font-size:10px;color:{muted};font-weight:800;">URL</div>
                 <div style="font-size:12px;margin-top:8px;">{link}</div>
             </div>
-            <div style="border:1px solid rgba(148,163,184,.22);background:rgba(3,7,18,.88);padding:8px;">
-                <div style="font-size:10px;color:#94a3b8;font-weight:800;">SHOT</div>
-                <div style="font-size:12px;color:#f8fafc;font-weight:850;margin-top:4px;">{escape(shot_date)}</div>
-                <div style="font-size:12px;color:#cbd5e1;font-weight:750;">{escape(shot_time)}</div>
+            <div style="border:1px solid {border};background:{surface_soft};padding:8px;border-radius:8px;">
+                <div style="font-size:10px;color:{muted};font-weight:800;">SHOT</div>
+                <div style="font-size:12px;color:{text};font-weight:850;margin-top:4px;">{escape(shot_date)}</div>
+                <div style="font-size:12px;color:{muted};font-weight:750;">{escape(shot_time)}</div>
             </div>
         </div>
         {advanced_html}
@@ -1334,12 +1141,14 @@ def record_popup_html(spot: dict[str, Any]) -> str:
 
 
 def add_direction_vector(fmap: folium.Map, spot: dict[str, Any]) -> None:
-    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+    color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
+    surface = ui_color("color-surface")
+    text = ui_color("color-text")
     end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot_drct(spot))
     folium.CircleMarker(
         location=(spot["lat"], spot["lng"]),
         radius=10,
-        color="#f8fafc",
+        color=surface,
         weight=2,
         fill=True,
         fill_color=color,
@@ -1349,10 +1158,10 @@ def add_direction_vector(fmap: folium.Map, spot: dict[str, Any]) -> None:
     folium.CircleMarker(
         location=(spot["lat"], spot["lng"]),
         radius=4,
-        color="#020611",
+        color=surface,
         weight=1,
         fill=True,
-        fill_color="#ffffff",
+        fill_color=text,
         fill_opacity=0.95,
     ).add_to(fmap)
     folium.PolyLine(
@@ -1378,12 +1187,11 @@ def add_selected_direction_preview(
     lat: float,
     lng: float,
     direction: int | float,
-    *,
-    light_mode: bool,
 ) -> None:
-    color = "#dc2626" if light_mode else "#fb7185"
-    label_bg = "rgba(255,255,255,0.94)" if light_mode else "rgba(2,6,15,0.92)"
-    label_text = "#0f172a" if light_mode else "#f8fafc"
+    color = ui_color("color-accent")
+    label_bg = ui_color("color-surface")
+    label_text = ui_color("color-text")
+    label_shadow = ui_color("color-shadow")
     end_lat, end_lng = destination_point(lat, lng, direction, distance_m=420)
     preview_line = folium.PolyLine(
         locations=[(lat, lng), (end_lat, end_lng)],
@@ -1409,7 +1217,7 @@ def add_selected_direction_preview(
             class_name="pgis-direction-label",
             html=(
                 f'<span style="background:{label_bg};color:{label_text};'
-                f'border:1px solid {color};box-shadow:0 12px 26px rgba(0,0,0,.24);">'
+                f'border:1px solid {color};box-shadow:0 12px 26px {label_shadow};">'
                 f"{int(round(float(direction))) % 360:03d} {compass_label(direction)}</span>"
             ),
             icon_size=(96, 26),
@@ -1434,6 +1242,8 @@ class DirectionClickScript(MacroElement):
             var start = [{{ this.start_lat }}, {{ this.start_lng }}];
             var end = [{{ this.end_lat }}, {{ this.end_lng }}];
             var color = "{{ this.color }}";
+            var surface = "{{ this.surface }}";
+            var text = "{{ this.text }}";
             function clearDirectionLayer() {
                 if (window.__pgisDirectionLayer) {
                     map.removeLayer(window.__pgisDirectionLayer);
@@ -1448,7 +1258,7 @@ class DirectionClickScript(MacroElement):
                 window.__pgisDirectionLayer = L.layerGroup([
                     L.circleMarker(start, {
                         radius: 12,
-                        color: "#f8fafc",
+                        color: surface,
                         weight: 2,
                         fill: true,
                         fillColor: color,
@@ -1458,10 +1268,10 @@ class DirectionClickScript(MacroElement):
                     }),
                     L.circleMarker(start, {
                         radius: 4,
-                        color: "#020611",
+                        color: surface,
                         weight: 1,
                         fill: true,
-                        fillColor: "#ffffff",
+                        fillColor: text,
                         fillOpacity: 0.98,
                         interactive: false
                     }),
@@ -1499,7 +1309,9 @@ class DirectionClickScript(MacroElement):
         self.start_lng = f"{float(spot['lng']):.8f}"
         self.end_lat = f"{end_lat:.8f}"
         self.end_lng = f"{end_lng:.8f}"
-        self.color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+        self.color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
+        self.surface = ui_color("color-surface")
+        self.text = ui_color("color-text")
 
 
 class SelectedPointMarkerScript(MacroElement):
@@ -1839,12 +1651,11 @@ class RightClickSelectScript(MacroElement):
         super().__init__()
         self._name = "RightClickSelectScript"
         self.map_name = fmap.get_name()
-        light_mode = st.session_state.get("theme_mode", "dark") == "light"
-        self.selected_ring = "#0f172a" if light_mode else "#f8fafc"
-        self.selected_fill = "#0891b2" if light_mode else "#22d3ee"
-        self.selected_inner_stroke = "#ffffff" if light_mode else "#020611"
-        self.selected_inner_fill = "#0f172a" if light_mode else "#ffffff"
-        self.direction_color = "#dc2626" if light_mode else "#fb7185"
+        self.selected_ring = ui_color("color-text")
+        self.selected_fill = ui_color("color-accent")
+        self.selected_inner_stroke = ui_color("color-surface")
+        self.selected_inner_fill = ui_color("color-text")
+        self.direction_color = ui_color("color-accent")
         self.default_direction = int(st.session_state.get("record_direction", 45)) % 360
         selected_lat, selected_lng = st.session_state.get("selected_point", SEOUL_CENTER)
         self.selected_lat = f"{float(selected_lat):.8f}"
@@ -1859,24 +1670,19 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         active_spot = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
         if active_spot:
             center = (active_spot["lat"], active_spot["lng"])
-    light_mode = st.session_state.get("theme_mode", "dark") == "light"
-    tile_url = (
-        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        if light_mode
-        else "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-    )
-    tile_name = "Light Matter" if light_mode else "Dark Matter"
-    map_bg = "#f4f7fb" if light_mode else "#060811"
-    popup_surface = "rgba(255, 255, 255, 0.98)" if light_mode else "rgba(2, 6, 17, 0.98)"
-    popup_text = "#0f172a" if light_mode else "#f8fafc"
-    popup_border = "rgba(15, 23, 42, 0.18)" if light_mode else "rgba(248, 250, 252, 0.34)"
-    popup_shadow = "0 20px 50px rgba(15, 23, 42, 0.18)" if light_mode else "0 22px 58px rgba(0, 0, 0, 0.62)"
-    popup_inset = "rgba(15, 23, 42, 0.05)" if light_mode else "rgba(255,255,255,0.08)"
-    popup_close_hover = "#020617" if light_mode else "#ffffff"
-    selected_ring = "#0f172a" if light_mode else "#f8fafc"
-    selected_fill = "#0891b2" if light_mode else "#22d3ee"
-    selected_inner_stroke = "#ffffff" if light_mode else "#020611"
-    selected_inner_fill = "#0f172a" if light_mode else "#ffffff"
+    tile_url = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+    tile_name = "Light Matter"
+    map_bg = ui_color("color-canvas")
+    popup_surface = ui_color("color-surface")
+    popup_text = ui_color("color-text")
+    popup_border = ui_color("color-border")
+    popup_shadow = f"0 20px 50px {ui_color('color-shadow')}"
+    popup_inset = ui_color("color-highlight")
+    popup_close_hover = ui_color("color-text")
+    selected_ring = ui_color("color-text")
+    selected_fill = ui_color("color-accent")
+    selected_inner_stroke = ui_color("color-surface")
+    selected_inner_fill = ui_color("color-text")
 
     fmap = folium.Map(
         location=center,
@@ -1915,9 +1721,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             }}
             .leaflet-popup-content-wrapper,
             .leaflet-popup-tip {{
-                background:
-                    linear-gradient(135deg, rgba(255,255,255,0.08), transparent 24% 72%, rgba(34,211,238,0.08)),
-                    {popup_surface} !important;
+                background: {popup_surface} !important;
                 color: {popup_text} !important;
                 border: 1px solid {popup_border};
                 border-radius: 8px !important;
@@ -1931,7 +1735,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             .leaflet-popup-close-button {{
                 color: {popup_text} !important;
                 font-weight: 900 !important;
-                text-shadow: 0 0 12px rgba(255,255,255,0.45);
+                text-shadow: none !important;
             }}
             .leaflet-popup-close-button:hover {{
                 background: transparent !important;
@@ -1992,11 +1796,10 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             float(lat),
             float(lng),
             int(st.session_state.get("record_direction", 45)) % 360,
-            light_mode=light_mode,
         )
 
     for spot in spots:
-        color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+        color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
         active = spot["id"] == st.session_state.active_spot_id
         marker = folium.CircleMarker(
             location=(spot["lat"], spot["lng"]),
@@ -2139,7 +1942,7 @@ def render_sidebar(spots: list[dict[str, Any]]) -> None:
         st.divider()
         st.markdown("### 스팟")
         for spot in spots:
-            color = WEATHER_COLORS.get(spot["weather"], "#38bdf8")
+            color = WEATHER_COLORS.get(spot["weather"], ui_color("color-accent"))
             active = spot["id"] == st.session_state.active_spot_id
             label = f"{'● ' if active else ''}{spot['title']}"
             if st.button(label, key=f"select_spot_{spot['id']}", use_container_width=True):
@@ -2209,7 +2012,7 @@ def render_filter_floating(spots: list[dict[str, Any]]) -> None:
         if not spots:
             st.markdown('<p class="muted">NO MATCHED SPOTS</p>', unsafe_allow_html=True)
         for spot in spots:
-            color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+            color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
             active_mark = "ACTIVE " if spot["id"] == st.session_state.active_spot_id else ""
             if st.button(f"{active_mark}{spot.get('title', '')}", key=f"float_select_spot_{spot['id']}", use_container_width=True):
                 st.session_state.active_spot_id = spot["id"]
@@ -2240,23 +2043,7 @@ def render_filter_floating(spots: list[dict[str, Any]]) -> None:
 
 
 def render_settings_floating() -> None:
-    with st.container(key="settings_floating_panel"):
-        if st.button("SETTINGS", key="settings_floating_toggle", use_container_width=True):
-            st.session_state.settings_open = not st.session_state.settings_open
-            st.rerun()
-
-        if not st.session_state.settings_open:
-            return
-
-        light_mode = st.toggle(
-            "Light mode",
-            value=st.session_state.get("theme_mode", "dark") == "light",
-            key="settings_light_mode",
-        )
-        next_theme = "light" if light_mode else "dark"
-        if next_theme != st.session_state.get("theme_mode", "dark"):
-            st.session_state.theme_mode = next_theme
-            st.rerun()
+    return
 
 
 def render_drawer_handles() -> None:
@@ -2322,7 +2109,7 @@ def render_form() -> None:
         <div class="spot-card">
             <div class="spot-title">
                 <span>기록 좌표</span>
-                <span style="color:#67e8f9;">{escape(coord_label)}</span>
+                <span style="color:var(--color-accent-strong);">{escape(coord_label)}</span>
             </div>
             <p class="muted" style="margin:.45rem 0 0;">
                 {"지도에서 기록할 위치를 클릭하세요." if st.session_state.picking_location else "위치 선택 버튼을 누른 뒤 지도에서 지점을 클릭하세요."}
@@ -2518,7 +2305,7 @@ def render_active_detail() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    color = WEATHER_COLORS.get(active["weather"], "#38bdf8")
+    color = WEATHER_COLORS.get(active["weather"], ui_color("color-accent"))
     link = link_html(spot_url(active))
     lens_pill = ""
     detail_note = f'<p class="muted" style="margin-bottom:0;">{link}</p>'
@@ -2538,7 +2325,7 @@ def render_active_detail() -> None:
             <div class="pill-row">
                 <span class="pill" style="border-color:{color};">{escape(active["weather"])}</span>
                 <span class="pill">{escape(active.get("date") or "-")}</span>
-                <span class="pill" style="border-color:{TIME_COLORS.get(time_meridiem(active.get("time")), "#a78bfa")};">{escape(active.get("time"))}</span>
+                <span class="pill" style="border-color:{TIME_COLORS.get(time_meridiem(active.get("time")), ui_color("color-border-strong"))};">{escape(active.get("time"))}</span>
                 <span class="pill">{compass_label(spot_drct(active))}</span>
                 {lens_pill}
             </div>
@@ -2573,7 +2360,7 @@ def render_record_detail() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    color = WEATHER_COLORS.get(active.get("weather", WEATHER_OPTIONS[0]), "#38bdf8")
+    color = WEATHER_COLORS.get(active.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
     link = link_html(spot_url(active), "OPEN URL")
     shot_date = active.get("date") or "-"
     shot_time = active.get("time") or "-"
