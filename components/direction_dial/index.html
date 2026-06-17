@@ -218,6 +218,23 @@
       });
     }
 
+    function broadcastDirectionPreview(nextValue) {
+      const preview = {
+        type: "pgis:directionPreview",
+        value: normalize(nextValue)
+      };
+      window.parent.postMessage(preview, "*");
+      try {
+        window.parent.document.querySelectorAll("iframe").forEach(function(frame) {
+          if (frame.contentWindow && frame !== window.frameElement) {
+            frame.contentWindow.postMessage(preview, "*");
+          }
+        });
+      } catch (error) {
+        // Cross-frame access can be restricted by the host; parent postMessage is enough as fallback.
+      }
+    }
+
     function normalize(degrees) {
       return ((Math.round(degrees) % 360) + 360) % 360;
     }
@@ -235,11 +252,14 @@
       return normalize((radians * 180 / Math.PI) + 90);
     }
 
-    function render(nextValue, emit) {
+    function render(nextValue, emit, preview) {
       value = normalize(nextValue);
       root.style.setProperty("--angle", value + "deg");
       valueEl.textContent = String(value).padStart(3, "0");
       compassEl.textContent = compassLabel(value);
+      if (preview) {
+        broadcastDirectionPreview(value);
+      }
       if (emit) {
         setComponentValue(value);
       }
@@ -249,7 +269,7 @@
       event.preventDefault();
       dragging = true;
       shell.setPointerCapture(event.pointerId);
-      render(angleFromPoint(event.clientX, event.clientY), false);
+      render(angleFromPoint(event.clientX, event.clientY), false, true);
     });
 
     shell.addEventListener("pointermove", function(event) {
@@ -257,12 +277,12 @@
         return;
       }
       event.preventDefault();
-      render(angleFromPoint(event.clientX, event.clientY), false);
+      render(angleFromPoint(event.clientX, event.clientY), false, true);
     });
 
     shell.addEventListener("pointerup", function(event) {
       if (dragging) {
-        render(angleFromPoint(event.clientX, event.clientY), false);
+        render(angleFromPoint(event.clientX, event.clientY), false, true);
         setComponentValue(value);
       }
       dragging = false;
@@ -289,12 +309,12 @@
       const args = event.data.args || {};
       const incoming = Number(args.value);
       if (!Number.isNaN(incoming)) {
-        render(incoming, false);
+        render(incoming, false, false);
       }
       setFrameHeight();
     });
 
-    render(value, false);
+    render(value, false, false);
     componentReady();
     window.addEventListener("resize", setFrameHeight);
   </script>

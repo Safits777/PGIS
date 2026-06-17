@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "kind": "pgis.spots",
+  "spots": [
+    {
+      "id": 1,
+      "title": "You're my everything",
+      "URL": "https://www.instagram.com/p/DY53jn5kjft/?igsh=MWl2bGs1Z2E1bjc0ag==",
+      "lat": 37.5502,
+      "lng": 127.0357,
+      "drct": 167,
+      "weather": "맑음",
+      "date": "2026-05-23",
+      "time": "17:00",
+      "body": "Fujifilm X-T30",
+      "lens": "TAMRON 18-300mm F3.5-6.3 Di III-A VC VXD",
+      "comp": {
+        "F값": "5.6",
+        "ISO값": "640",
+        "셔터스피드": "1/750",
+        "화각": "261mm"
+      }
+    },
+    {
+      "id": 2,
+      "title": "반포대교 윤슬",
+      "URL": "https://www.instagram.com/p/DWZIoz0EjNn/?igsh=dW1mZGRyYmJ1bGg4",
+      "lat": 37.514,
+      "lng": 127.0018,
+      "drct": 269,
+      "weather": "맑음",
+      "date": "2026-03-27",
+      "time": "17:45",
+      "body": "Fujifilm X-T30",
+      "lens": "TAMRON 18-300mm F3.5-6.3 Di III-A VC VXD",
+      "comp": {
+        "F값": "4.5",
+        "ISO값": "640",
+        "셔터스피드": "1/500",
+        "화각": "68mm"
+      }
+    },
+    {
+      "id": 3,
+      "title": "금호역 버스정류장에서.",
+      "URL": "https://www.instagram.com/p/DZJ8tNRSdtB/?igsh=MTFtdHE2OWc3Y243bA==",
+      "lat": 37.5443,
+      "lng": 127.0169,
+      "drct": 343,
+      "weather": "구름",
+      "date": "2026-06-04",
+      "time": "16:20",
+      "body": "Samsung Galaxy S24",
+      "lens": "Samsung Galaxy S24",
+      "comp": {
+        "F값": "2.4",
+        "ISO값": "25",
+        "셔터스피드": "1/744",
+        "화각": "69mm"
+      }
+    }
+  ]
+}

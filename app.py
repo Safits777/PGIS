@@ -11,6 +11,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -18,7 +19,10 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 
-INDEX_HTML_PATH = os.path.join(os.path.dirname(__file__), "index.html")
+APP_DIR = Path(__file__).resolve().parent
+INDEX_HTML_PATH = APP_DIR / "index.html"
+SPOT_DATA_DIR = APP_DIR / "data" / "spots"
+SPOT_DATA_GLOB = "*.json"
 COLOR_TOKEN_RE = re.compile(r"--(color-[a-z0-9-]+)\s*:\s*([^;]+);", re.IGNORECASE)
 COLOR_TOKEN_FALLBACKS = {
     "color-canvas": "#f7f8f6",
@@ -41,7 +45,7 @@ COLOR_TOKEN_FALLBACKS = {
 def load_color_tokens() -> dict[str, str]:
     tokens = COLOR_TOKEN_FALLBACKS.copy()
     try:
-        with open(INDEX_HTML_PATH, "r", encoding="utf-8") as token_file:
+        with INDEX_HTML_PATH.open("r", encoding="utf-8") as token_file:
             token_source = token_file.read()
     except OSError:
         return tokens
@@ -58,6 +62,33 @@ def ui_color(name: str) -> str:
 def css_color_token_block() -> str:
     tokens = load_color_tokens()
     return "\n".join(f"            --{name}: {value};" for name, value in tokens.items())
+
+
+def spot_data_files() -> list[Path]:
+    if not SPOT_DATA_DIR.exists():
+        return []
+    return sorted(path for path in SPOT_DATA_DIR.glob(SPOT_DATA_GLOB) if path.is_file())
+
+
+def spots_from_payload(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        records = payload
+    elif isinstance(payload, dict):
+        records = payload.get("spots") or payload.get("records") or []
+    else:
+        records = []
+    return [dict(record) for record in records if isinstance(record, dict)]
+
+
+def load_spot_records() -> list[dict[str, Any]]:
+    spots: list[dict[str, Any]] = []
+    for path in spot_data_files():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        spots.extend(spots_from_payload(payload))
+    return spots
 
 
 def _inside_streamlit() -> bool:
@@ -124,52 +155,6 @@ DIRECTION_DIAL_COMPONENT = components.declare_component(
 )
 
 
-SAMPLE_SPOTS: list[dict[str, Any]] = [
-    {
-        "id": 1,
-        "title": "You're my everything",
-        "URL": "https://www.instagram.com/p/DY53jn5kjft/?igsh=MWl2bGs1Z2E1bjc0ag==",
-        "lat": 37.5502,
-        "lng": 127.0357,
-        "drct": 167,
-        "weather": "맑음",
-        "date": "2026-05-23",
-        "time": "17:00",
-        "body": "Fujifilm X-T30",
-        "lens": "TAMRON 18-300mm F3.5-6.3 Di III-A VC VXD",
-        "comp": {"F값": "5.6", "ISO값": "640", "셔터스피드": "1/750", "화각": "261mm"},
-    },
-    {
-        "id": 2,
-        "title": "반포대교 윤슬",
-        "URL": "https://www.instagram.com/p/DWZIoz0EjNn/?igsh=dW1mZGRyYmJ1bGg4",
-        "lat": 37.5140,
-        "lng": 127.0018,
-        "drct": 269,
-        "weather": "맑음",
-        "date": "2026-03-27",
-        "time": "17:45",
-        "body": "Fujifilm X-T30",
-        "lens": "TAMRON 18-300mm F3.5-6.3 Di III-A VC VXD",
-        "comp": {"F값": "4.5", "ISO값": "640", "셔터스피드": "1/500", "화각": "68mm"},
-    },
-    {
-        "id": 3,
-        "title": "금호역 버스정류장에서.",
-        "URL": "https://www.instagram.com/p/DZJ8tNRSdtB/?igsh=MTFtdHE2OWc3Y243bA==",
-        "lat": 37.5443,
-        "lng": 127.0169,
-        "drct": 343,
-        "weather": "구름",
-        "date": "2026-06-04",
-        "time": "16:20",
-        "body": "Samsung Galaxy S24",
-        "lens": "Samsung Galaxy S24",
-        "comp": {"F값": "2.4", "ISO값": "25", "셔터스피드": "1/744", "화각": "69mm"},
-    },
-]
-
-
 def inject_css() -> None:
     st.markdown(
         f"""
@@ -191,12 +176,6 @@ def inject_css() -> None:
             --neon-blue: var(--color-accent);
             --neon-pink: var(--color-accent-strong);
             --neon-violet: var(--color-border-strong);
-            --drawer-width: min(420px, calc(100vw - 62px));
-            --drawer-handle: 46px;
-            --left-drawer-x: calc(-100% - 1px);
-            --right-drawer-x: calc(100% + 1px);
-            --left-handle-left: 0px;
-            --right-handle-right: 0px;
             --record-panel-width: min(330px, calc(100vw - 24px));
             --record-panel-left: calc(100vw - 360px);
             --record-panel-top: 18px;
@@ -273,8 +252,6 @@ def inject_css() -> None:
         .stat-tile,
         .glass-panel,
         .spot-card,
-        .st-key-filter_floating_panel,
-        .st-key-settings_floating_panel,
         .st-key-right_drawer_panel {{
             background: var(--color-surface);
             border: 1px solid var(--color-border);
@@ -524,114 +501,6 @@ def inject_css() -> None:
             line-height: 1.35;
         }}
 
-        .st-key-filter_floating_panel {{
-            position: fixed;
-            left: 18px;
-            bottom: 18px;
-            width: min(360px, calc(100vw - 36px)) !important;
-            max-height: min(70vh, 640px);
-            overflow-y: auto;
-            overflow-x: hidden;
-            z-index: 46;
-            padding: 0.78rem;
-        }}
-
-        .filter-head {{
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 0.65rem;
-            align-items: center;
-            margin-bottom: 0.65rem;
-        }}
-
-        .filter-count {{
-            min-width: 68px;
-            justify-content: center;
-            padding: 0.52rem 0.58rem;
-            font-size: 0.78rem;
-            font-weight: 900;
-        }}
-
-        .filter-mini {{
-            border-top: 1px solid var(--color-border);
-            padding-top: 0.62rem;
-            font-size: 0.82rem;
-            line-height: 1.45;
-        }}
-
-        .st-key-settings_floating_panel {{
-            position: fixed;
-            top: 18px;
-            right: 18px;
-            width: min(230px, calc(100vw - 36px)) !important;
-            z-index: 82;
-            padding: 0.58rem;
-        }}
-
-        .st-key-settings_floating_panel [data-testid="stMarkdownContainer"] p {{
-            margin: 0;
-        }}
-
-        .drawer-handle,
-        .st-key-left_drawer_handle,
-        .st-key-right_drawer_handle {{
-            position: fixed;
-            top: 50%;
-            width: var(--drawer-handle) !important;
-            min-width: var(--drawer-handle) !important;
-            transform: translateY(-50%);
-            z-index: 70;
-            filter: drop-shadow(0 14px 22px var(--color-shadow-soft));
-        }}
-
-        .drawer-handle-left,
-        .st-key-left_drawer_handle {{
-            left: var(--left-handle-left);
-        }}
-
-        .drawer-handle-right,
-        .st-key-right_drawer_handle {{
-            right: var(--right-handle-right);
-        }}
-
-        .drawer-handle button,
-        .st-key-left_drawer_handle button,
-        .st-key-right_drawer_handle button {{
-            width: var(--drawer-handle) !important;
-            min-width: var(--drawer-handle) !important;
-            height: 148px;
-            padding: 0 !important;
-            border-radius: var(--radius-md) !important;
-            writing-mode: vertical-rl;
-            text-orientation: mixed;
-            letter-spacing: 0 !important;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            font-size: 0.72rem;
-            font-weight: 900;
-            color: var(--color-text) !important;
-            background: var(--color-surface) !important;
-            border: 1px solid var(--color-border) !important;
-            box-shadow: 0 12px 28px var(--color-shadow-soft);
-        }}
-
-        .st-key-left_drawer_handle button {{
-            border-left: 3px solid var(--color-accent) !important;
-        }}
-
-        .st-key-right_drawer_handle button {{
-            border-right: 3px solid var(--color-accent-strong) !important;
-        }}
-
-        .drawer-handle button:hover,
-        .st-key-left_drawer_handle button:hover,
-        .st-key-right_drawer_handle button:hover,
-        .stButton > button:hover,
-        .stDownloadButton > button:hover {{
-            border-color: var(--color-accent) !important;
-            color: var(--color-accent-strong) !important;
-            background: var(--color-surface-soft) !important;
-        }}
-
         .stButton > button,
         .stDownloadButton > button,
         [data-testid="stBaseButton-secondary"],
@@ -662,6 +531,47 @@ def inject_css() -> None:
         label {{
             color: var(--color-muted) !important;
             font-weight: 750;
+        }}
+
+        .st-key-record_advance_open,
+        .st-key-record_long_exposure {{
+            margin: 0.18rem 0;
+        }}
+
+        .st-key-record_advance_open label,
+        .st-key-record_long_exposure label {{
+            color: var(--color-text) !important;
+            transition: color 180ms ease;
+        }}
+
+        .st-key-record_advance_open [role="checkbox"],
+        .st-key-record_long_exposure [role="checkbox"] {{
+            background: var(--color-border-strong) !important;
+            border-color: var(--color-border-strong) !important;
+            box-shadow: inset 0 0 0 1px var(--color-highlight), 0 1px 3px var(--color-shadow-soft) !important;
+            transition:
+                background-color 180ms ease,
+                border-color 180ms ease,
+                box-shadow 180ms ease,
+                transform 180ms ease !important;
+        }}
+
+        .st-key-record_advance_open [role="checkbox"][aria-checked="false"],
+        .st-key-record_long_exposure [role="checkbox"][aria-checked="false"] {{
+            background: var(--color-track) !important;
+            border-color: var(--color-border-strong) !important;
+        }}
+
+        .st-key-record_advance_open [role="checkbox"][aria-checked="true"],
+        .st-key-record_long_exposure [role="checkbox"][aria-checked="true"] {{
+            background: var(--color-accent) !important;
+            border-color: var(--color-accent-strong) !important;
+            box-shadow: 0 0 0 3px var(--color-accent-soft), 0 1px 4px var(--color-shadow-soft) !important;
+        }}
+
+        .st-key-record_advance_open [role="checkbox"]:hover,
+        .st-key-record_long_exposure [role="checkbox"]:hover {{
+            transform: translateY(-1px);
         }}
 
         input,
@@ -736,14 +646,7 @@ def inject_css() -> None:
                 font-size: 2.2rem;
             }}
 
-            .st-key-filter_floating_panel {{
-                left: 10px;
-                right: 10px;
-                bottom: 10px;
-                width: auto !important;
-                max-height: 56vh;
-                padding: 0.68rem;
-            }}
+
         }}
         </style>
         """,
@@ -752,18 +655,12 @@ def inject_css() -> None:
     return
 
 def inject_layout_vars() -> None:
-    left_open = bool(st.session_state.get("left_drawer_open", False))
-    right_open = bool(st.session_state.get("right_drawer_open", False))
     record_left = int(st.session_state.get("record_panel_x", 24)) + 18
     record_top = int(st.session_state.get("record_panel_y", 24)) + 18
     st.markdown(
         f"""
         <style>
         :root {{
-            --left-drawer-x: {"0" if left_open else "calc(-100% - 1px)"};
-            --right-drawer-x: {"0" if right_open else "calc(100% + 1px)"};
-            --left-handle-left: {"var(--drawer-width)" if left_open else "0px"};
-            --right-handle-right: {"var(--drawer-width)" if right_open else "0px"};
             --record-panel-left: {record_left}px;
             --record-panel-top: {record_top}px;
         }}
@@ -773,18 +670,43 @@ def inject_layout_vars() -> None:
     )
 
 
+def inject_direction_preview_bridge() -> None:
+    components.html(
+        """
+        <script>
+        (function() {
+            var host = window.parent;
+            if (!host || host.__pgisDirectionPreviewBridgeInstalled) {
+                return;
+            }
+            host.__pgisDirectionPreviewBridgeInstalled = true;
+            host.addEventListener("message", function(event) {
+                var data = event.data || {};
+                if (data.type !== "pgis:directionPreview" || !host.document) {
+                    return;
+                }
+                host.document.querySelectorAll("iframe").forEach(function(frame) {
+                    if (frame.contentWindow && frame.contentWindow !== event.source) {
+                        frame.contentWindow.postMessage(data, "*");
+                    }
+                });
+            });
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def ensure_state() -> None:
     now = datetime.now()
     defaults = {
-        "spots": [spot.copy() for spot in SAMPLE_SPOTS],
+        "spots": load_spot_records(),
         "selected_point": SEOUL_CENTER,
         "map_center": SEOUL_CENTER,
         "active_spot_id": 1,
-        "weather_filter": WEATHER_OPTIONS.copy(),
-        "time_filter": TIME_OPTIONS.copy(),
-        "search_query": "",
         "map_zoom": 12,
-        "left_drawer_open": False,
         "right_drawer_open": False,
         "form_lat": SEOUL_CENTER[0],
         "form_lng": SEOUL_CENTER[1],
@@ -792,8 +714,6 @@ def ensure_state() -> None:
         "record_panel_y": 24,
         "record_long_exposure": False,
         "picking_location": False,
-        "filter_open": False,
-        "settings_open": False,
         "last_context_click_nonce": None,
         "last_panel_close_nonce": None,
         "record_direction": 45,
@@ -813,12 +733,6 @@ def ensure_state() -> None:
         normalize_spot(spot, index + 1)
         for index, spot in enumerate(st.session_state.get("spots", []))
     ]
-    current_weather_filter = st.session_state.get("weather_filter") or []
-    current_time_filter = st.session_state.get("time_filter") or []
-    if not set(current_weather_filter).issubset(set(WEATHER_OPTIONS)):
-        st.session_state.weather_filter = WEATHER_OPTIONS.copy()
-    if not set(current_time_filter).issubset(set(TIME_OPTIONS)):
-        st.session_state.time_filter = TIME_OPTIONS.copy()
 
 
 def escape(value: Any) -> str:
@@ -1571,6 +1485,18 @@ class RightClickSelectScript(MacroElement):
                     })
                 ]).addTo(map);
             }
+            window.addEventListener("message", function(event) {
+                var data = event.data || {};
+                if (data.type !== "pgis:directionPreview" || !recordPanelOpen || !selectedLatLng) {
+                    return;
+                }
+                var bearing = Number(data.value);
+                if (!Number.isFinite(bearing)) {
+                    return;
+                }
+                bearing = ((Math.round(bearing) % 360) + 360) % 360;
+                drawDirectionPreview(selectedLatLng, bearing);
+            });
             map.on("move zoom resize", requestRecordPanelSync);
             map.on("moveend zoomend", syncRecordPanelPosition);
             if (recordPanelOpen) {
@@ -1670,8 +1596,8 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         active_spot = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
         if active_spot:
             center = (active_spot["lat"], active_spot["lng"])
-    tile_url = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-    tile_name = "Light Matter"
+    tile_url = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+    tile_name = "Voyager"
     map_bg = ui_color("color-canvas")
     popup_surface = ui_color("color-surface")
     popup_text = ui_color("color-text")
@@ -1718,6 +1644,9 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             }}
             .leaflet-container {{
                 background: {map_bg};
+            }}
+            .leaflet-tile-pane img {{
+                filter: saturate(1.22) contrast(1.04);
             }}
             .leaflet-popup-content-wrapper,
             .leaflet-popup-tip {{
@@ -1817,48 +1746,6 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
 
     return fmap
 
-    """
-        <div style="font-weight:800;margin-bottom:5px;">날씨</div>
-
-
-    """
-
-
-def filtered_spots() -> list[dict[str, Any]]:
-    weather_filter = set(st.session_state.weather_filter or WEATHER_OPTIONS)
-    time_filter = set(st.session_state.time_filter or TIME_OPTIONS)
-    query = st.session_state.search_query.strip().lower()
-    result: list[dict[str, Any]] = []
-    for spot in st.session_state.spots:
-        weather = spot.get("weather", WEATHER_OPTIONS[0])
-        time_value = str(spot.get("time", ""))
-        meridiem = time_meridiem(time_value)
-        comp = spot_comp(spot)
-        haystack = " ".join(
-            [
-                spot.get("title", ""),
-                weather,
-                str(spot.get("date", "")),
-                time_value,
-                spot_url(spot),
-                str(spot.get("body", "")),
-                str(spot.get("lens", "")),
-                comp.get("F값", ""),
-                comp.get("ISO값", ""),
-                comp.get("셔터스피드", ""),
-                comp.get("화각", ""),
-            ]
-        ).lower()
-        if weather not in weather_filter:
-            continue
-        if meridiem not in time_filter:
-            continue
-        if query and query not in haystack:
-            continue
-        result.append(spot)
-    return result
-
-
 def spot_csv(spots: list[dict[str, Any]]) -> bytes:
     out = io.StringIO()
     writer = csv.DictWriter(
@@ -1930,136 +1817,6 @@ def render_header(spots: list[dict[str, Any]]) -> None:
         """,
         unsafe_allow_html=True,
     )
-
-
-def render_sidebar(spots: list[dict[str, Any]]) -> None:
-    with st.sidebar:
-        st.markdown("### 필터")
-        st.session_state.search_query = st.text_input("검색", value=st.session_state.search_query, placeholder="장소, 무드, 메모")
-        st.session_state.weather_filter = st.multiselect("날씨", WEATHER_OPTIONS, default=st.session_state.weather_filter)
-        st.session_state.time_filter = st.multiselect("오전/오후", TIME_OPTIONS, default=st.session_state.time_filter)
-
-        st.divider()
-        st.markdown("### 스팟")
-        for spot in spots:
-            color = WEATHER_COLORS.get(spot["weather"], ui_color("color-accent"))
-            active = spot["id"] == st.session_state.active_spot_id
-            label = f"{'● ' if active else ''}{spot['title']}"
-            if st.button(label, key=f"select_spot_{spot['id']}", use_container_width=True):
-                st.session_state.active_spot_id = spot["id"]
-                st.session_state.selected_point = (spot["lat"], spot["lng"])
-                st.session_state.form_lat = spot["lat"]
-                st.session_state.form_lng = spot["lng"]
-                st.rerun()
-            st.markdown(
-                f"""
-                <div class="pill-row" style="margin-top:-.45rem;margin-bottom:.6rem;">
-                    <span class="pill" style="border-color:{color};">{escape(spot["weather"])}</span>
-                    <span class="pill">{escape(spot.get("time", ""))}</span>
-                    <span class="pill">{compass_label(spot_drct(spot))}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.divider()
-        st.download_button(
-            "CSV 내보내기",
-            data=spot_csv(st.session_state.spots),
-            file_name=f"glassshot-pgis-{datetime.now().strftime('%Y%m%d-%H%M')}.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-
-def render_filter_floating(spots: list[dict[str, Any]]) -> None:
-    total = len(st.session_state.spots)
-    visible = len(spots)
-    active = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
-
-    with st.container(key="filter_floating_panel"):
-        st.markdown(
-            f"""
-            <div class="filter-head">
-                <div></div>
-                <div class="filter-count">{visible}/{total}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if st.button("FILTER", key="filter_floating_toggle", use_container_width=True):
-            st.session_state.filter_open = not st.session_state.filter_open
-            st.rerun()
-
-        if not st.session_state.filter_open:
-            active_title = escape(active["title"]) if active else "NO ACTIVE SPOT"
-            st.markdown(
-                f"""
-                <div class="filter-mini">
-                    <strong>{active_title}</strong><br />
-                    VIEW {visible} / TOTAL {total}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            return
-
-        st.text_input("Search", key="search_query", placeholder="title, URL, body, lens")
-        st.multiselect("Weather", WEATHER_OPTIONS, key="weather_filter")
-        st.multiselect("AM/PM", TIME_OPTIONS, key="time_filter")
-
-        st.divider()
-        if not spots:
-            st.markdown('<p class="muted">NO MATCHED SPOTS</p>', unsafe_allow_html=True)
-        for spot in spots:
-            color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
-            active_mark = "ACTIVE " if spot["id"] == st.session_state.active_spot_id else ""
-            if st.button(f"{active_mark}{spot.get('title', '')}", key=f"float_select_spot_{spot['id']}", use_container_width=True):
-                st.session_state.active_spot_id = spot["id"]
-                st.session_state.selected_point = (spot["lat"], spot["lng"])
-                st.session_state.form_lat = spot["lat"]
-                st.session_state.form_lng = spot["lng"]
-                st.rerun()
-            primary_meta = spot.get("body") or spot.get("weather", WEATHER_OPTIONS[0])
-            secondary_meta = spot.get("lens") or spot.get("time", "")
-            st.markdown(
-                f"""
-                <div class="pill-row" style="margin-top:-.45rem;margin-bottom:.6rem;">
-                    <span class="pill" style="border-color:{color};">{escape(primary_meta)}</span>
-                    <span class="pill">{escape(secondary_meta)}</span>
-                    <span class="pill">{compass_label(spot_drct(spot))}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.download_button(
-            "EXPORT CSV",
-            data=spot_csv(st.session_state.spots),
-            file_name=f"glassshot-pgis-{datetime.now().strftime('%Y%m%d-%H%M')}.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-
-def render_settings_floating() -> None:
-    return
-
-
-def render_drawer_handles() -> None:
-    left_label = "FILTER"
-    right_label = "LOG"
-
-    if st.button(left_label, key="left_drawer_handle", help="필터 패널 열기/닫기"):
-        st.session_state.left_drawer_open = not st.session_state.left_drawer_open
-        st.rerun()
-
-    if st.button(right_label, key="right_drawer_handle", help="기록 패널 열기/닫기"):
-        next_open = not st.session_state.right_drawer_open
-        st.session_state.right_drawer_open = next_open
-        if not next_open:
-            st.session_state.picking_location = False
-        st.rerun()
 
 
 def add_spot(
@@ -2229,7 +1986,6 @@ def render_record_form() -> None:
     comp = {"F값": "", "ISO값": "", "셔터스피드": "", "화각": ""}
     shutter_speed = ""
     if advanced:
-        st.markdown('<p class="record-advanced-note">Body, lens, comp</p>', unsafe_allow_html=True)
         body_col, lens_col = st.columns(2)
         with body_col:
             body = st.text_input("바디", placeholder="Sony A7R V", key="record_body")
@@ -2490,12 +2246,11 @@ def render_map(spots: list[dict[str, Any]]) -> None:
 def main() -> None:
     ensure_state()
     inject_css()
-    spots = filtered_spots()
+    inject_direction_preview_bridge()
+    spots = st.session_state.spots
 
     render_map(spots)
     inject_layout_vars()
-    render_filter_floating(spots)
-    render_settings_floating()
     if st.session_state.right_drawer_open:
         with st.container(key="right_drawer_panel"):
             render_record_form()
