@@ -179,6 +179,9 @@ def inject_css() -> None:
             --record-panel-width: min(330px, calc(100vw - 24px));
             --record-panel-left: calc(100vw - 360px);
             --record-panel-top: 18px;
+            --record-danger: #ff5f57;
+            --record-danger-strong: #d93630;
+            --record-toggle-off: #3f464d;
             --radius-sm: 5px;
             --radius-md: 8px;
             --radius-pill: 999px;
@@ -484,6 +487,12 @@ def inject_css() -> None:
             font-size: 0.82rem !important;
         }}
 
+        .st-key-close_record_panel {{
+            display: flex;
+            justify-content: flex-end;
+            padding-top: 0.15rem;
+        }}
+
         .record-dial-caption {{
             margin: -0.15rem 0 0;
             text-align: center;
@@ -520,6 +529,26 @@ def inject_css() -> None:
             font-weight: 850;
         }}
 
+        .st-key-right_drawer_panel .st-key-close_record_panel button {{
+            width: 15px !important;
+            min-width: 15px !important;
+            height: 15px !important;
+            min-height: 15px !important;
+            padding: 0 !important;
+            border-radius: 50% !important;
+            border: 1px solid var(--record-danger-strong) !important;
+            background: var(--record-danger) !important;
+            color: transparent !important;
+            font-size: 0 !important;
+            line-height: 0 !important;
+            box-shadow: 0 1px 3px var(--color-shadow-soft) !important;
+        }}
+
+        .st-key-right_drawer_panel .st-key-close_record_panel button:hover {{
+            background: #ff6b63 !important;
+            border-color: var(--record-danger-strong) !important;
+        }}
+
         [data-testid="stSidebar"] h3,
         .st-key-right_drawer_panel h3 {{
             border-bottom: 1px solid var(--color-border);
@@ -533,21 +562,18 @@ def inject_css() -> None:
             font-weight: 750;
         }}
 
-        .st-key-record_advance_open,
         .st-key-record_long_exposure {{
             margin: 0.18rem 0;
         }}
 
-        .st-key-record_advance_open label,
         .st-key-record_long_exposure label {{
             color: var(--color-text) !important;
             transition: color 180ms ease;
         }}
 
-        .st-key-record_advance_open [role="checkbox"],
         .st-key-record_long_exposure [role="checkbox"] {{
-            background: var(--color-border-strong) !important;
-            border-color: var(--color-border-strong) !important;
+            background: var(--record-toggle-off) !important;
+            border-color: var(--record-toggle-off) !important;
             box-shadow: inset 0 0 0 1px var(--color-highlight), 0 1px 3px var(--color-shadow-soft) !important;
             transition:
                 background-color 180ms ease,
@@ -556,22 +582,44 @@ def inject_css() -> None:
                 transform 180ms ease !important;
         }}
 
-        .st-key-record_advance_open [role="checkbox"][aria-checked="false"],
         .st-key-record_long_exposure [role="checkbox"][aria-checked="false"] {{
-            background: var(--color-track) !important;
-            border-color: var(--color-border-strong) !important;
+            background: var(--record-toggle-off) !important;
+            border-color: var(--record-toggle-off) !important;
         }}
 
-        .st-key-record_advance_open [role="checkbox"][aria-checked="true"],
         .st-key-record_long_exposure [role="checkbox"][aria-checked="true"] {{
-            background: var(--color-accent) !important;
-            border-color: var(--color-accent-strong) !important;
-            box-shadow: 0 0 0 3px var(--color-accent-soft), 0 1px 4px var(--color-shadow-soft) !important;
+            background: var(--record-danger) !important;
+            border-color: var(--record-danger-strong) !important;
+            box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.22), 0 1px 4px var(--color-shadow-soft) !important;
         }}
 
-        .st-key-record_advance_open [role="checkbox"]:hover,
         .st-key-record_long_exposure [role="checkbox"]:hover {{
             transform: translateY(-1px);
+        }}
+
+        .st-key-right_drawer_panel [data-testid="stExpander"] details,
+        .st-key-right_drawer_panel [data-testid="stExpander"] details[open],
+        .st-key-right_drawer_panel [data-testid="stExpander"] summary,
+        .st-key-right_drawer_panel [data-testid="stExpander"] summary *,
+        .st-key-right_drawer_panel [data-testid="stExpander"] [data-testid="stExpanderDetails"] {{
+            background: var(--color-surface) !important;
+            color: var(--color-text) !important;
+            border-color: var(--color-border) !important;
+            box-shadow: none !important;
+        }}
+
+        .st-key-right_drawer_panel [data-testid="stExpander"] summary:hover {{
+            background: var(--color-surface-soft) !important;
+        }}
+
+        .st-key-right_drawer_panel [data-testid="stExpander"] [data-testid="stExpanderDetails"] > div {{
+            background: var(--color-surface) !important;
+        }}
+
+        .st-key-record_weather,
+        .st-key-record_weather [data-baseweb="select"],
+        .st-key-record_weather [data-baseweb="select"] > div {{
+            min-width: 86px !important;
         }}
 
         input,
@@ -582,6 +630,14 @@ def inject_css() -> None:
             border-color: var(--color-border) !important;
             color: var(--color-text) !important;
             box-shadow: inset 0 0 0 1px var(--color-highlight) !important;
+        }}
+
+        input::placeholder,
+        textarea::placeholder,
+        .st-key-right_drawer_panel input::placeholder,
+        .st-key-right_drawer_panel textarea::placeholder {{
+            color: var(--color-muted) !important;
+            opacity: 1 !important;
         }}
 
         input:focus,
@@ -717,14 +773,13 @@ def ensure_state() -> None:
         "last_context_click_nonce": None,
         "last_panel_close_nonce": None,
         "record_direction": 45,
-        "record_advance_open": False,
         "record_date_text": now.strftime("%Y-%m-%d"),
         "record_time_text": now.strftime("%H:%M"),
-        "record_iso_text": "100",
+        "record_iso_text": "",
         "record_f_value": "",
         "record_focal": "",
-        "record_shutter_seconds_text": "1",
-        "record_shutter_denominator_text": "125",
+        "record_shutter_seconds_text": "",
+        "record_shutter_denominator_text": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1837,7 +1892,7 @@ def render_record_form() -> None:
     lat = float(st.session_state.form_lat)
     lng = float(st.session_state.form_lng)
     coord_label = f"{lat:.6f}, {lng:.6f}"
-    head_col, close_col = st.columns([1, 0.32])
+    head_col, close_col = st.columns([1, 0.09])
     with head_col:
         st.markdown(
             f"""
@@ -1851,7 +1906,7 @@ def render_record_form() -> None:
             unsafe_allow_html=True,
         )
     with close_col:
-        close_clicked = st.button("닫기", key="close_record_panel", use_container_width=True)
+        close_clicked = st.button("닫기", key="close_record_panel", help="닫기", use_container_width=False)
     if close_clicked:
         clear_record_selection()
         st.rerun()
@@ -1864,7 +1919,7 @@ def render_record_form() -> None:
             title = st.text_input("제목", placeholder="촬영 지점 이름", key="record_title")
             url = st.text_input("URL", placeholder="https://instagram.com/...", key="record_url")
 
-        weather_col, date_col, time_col = st.columns([0.72, 1.0, 0.82])
+        weather_col, date_col, time_col = st.columns([0.9, 1.0, 0.78])
         with weather_col:
             weather = st.selectbox("날씨", WEATHER_OPTIONS, key="record_weather")
         with date_col:
@@ -1878,8 +1933,7 @@ def render_record_form() -> None:
         shutter_raw = ""
         shutter_speed = ""
 
-        with st.expander("ADVANCE", expanded=bool(st.session_state.get("record_advance_open", False))):
-            advanced = st.toggle("세부 정보 저장", key="record_advance_open")
+        with st.expander("ADVANCE"):
             body_col, lens_col = st.columns(2)
             with body_col:
                 body = st.text_input("바디", placeholder="Sony A7R V", key="record_body")
@@ -1892,7 +1946,7 @@ def render_record_form() -> None:
             with iso_col:
                 iso_value = st.text_input("ISO값", placeholder="100", key="record_iso_text")
 
-            long_exposure = st.toggle("장노출", key="record_long_exposure")
+            long_exposure = bool(st.session_state.get("record_long_exposure", False))
             shutter_col, focal_col = st.columns(2)
             with shutter_col:
                 if long_exposure:
@@ -1904,16 +1958,14 @@ def render_record_form() -> None:
             with focal_col:
                 focal = st.text_input("화각", placeholder="35mm", key="record_focal")
 
-            if advanced:
-                comp = {
-                    "F값": f_value.strip(),
-                    "ISO값": iso_value.strip(),
-                    "셔터스피드": shutter_speed.strip(),
-                    "화각": focal.strip(),
-                }
-            else:
-                body = ""
-                lens = ""
+            long_exposure = st.toggle("장노출", key="record_long_exposure")
+
+            comp = {
+                "F값": f_value.strip(),
+                "ISO값": iso_value.strip(),
+                "셔터스피드": shutter_speed.strip(),
+                "화각": focal.strip(),
+            }
 
         submitted = st.form_submit_button("마커 생성", type="primary", use_container_width=True)
 
@@ -1928,9 +1980,9 @@ def render_record_form() -> None:
             st.error("촬영 날짜는 YYYY-MM-DD 형식으로 입력하세요.")
         elif not clock:
             st.error("시간은 24시간 형식으로 입력하세요. 예: 17:30")
-        elif advanced and st.session_state.record_long_exposure and shutter_raw.strip() and not shutter_raw.strip().isdigit():
+        elif st.session_state.record_long_exposure and shutter_raw.strip() and not shutter_raw.strip().isdigit():
             st.error("장노출 셔터스피드는 초 단위 숫자로 입력하세요.")
-        elif advanced and not st.session_state.record_long_exposure and shutter_raw.strip() and not shutter_raw.strip().isdigit():
+        elif not st.session_state.record_long_exposure and shutter_raw.strip() and not shutter_raw.strip().isdigit():
             st.error("셔터스피드 1/N은 숫자로 입력하세요.")
         else:
             add_spot(
