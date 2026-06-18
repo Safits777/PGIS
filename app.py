@@ -445,6 +445,42 @@ def inject_css() -> None:
             display: none;
         }}
 
+        [data-baseweb="tooltip"],
+        [data-baseweb="popover"],
+        [role="tooltip"],
+        [data-testid="stTooltipContent"] {{
+            color-scheme: {color_scheme} !important;
+            border-color: var(--color-border) !important;
+            background: var(--color-surface) !important;
+            color: var(--color-text) !important;
+            box-shadow: 0 10px 26px var(--color-shadow) !important;
+        }}
+
+        [data-baseweb="tooltip"] > div,
+        [data-baseweb="popover"] > div,
+        [role="tooltip"] > div,
+        [data-testid="stTooltipContent"] > div {{
+            border: 1px solid var(--color-border) !important;
+            background: var(--color-surface) !important;
+            color: var(--color-text) !important;
+            box-shadow: 0 10px 26px var(--color-shadow) !important;
+        }}
+
+        [data-baseweb="tooltip"] *,
+        [data-baseweb="popover"] *,
+        [role="tooltip"] *,
+        [data-testid="stTooltipContent"] * {{
+            color: var(--color-text) !important;
+        }}
+
+        [data-baseweb="tooltip"] svg,
+        [data-baseweb="popover"] svg,
+        [role="tooltip"] svg,
+        [data-testid="stTooltipContent"] svg {{
+            color: var(--color-surface) !important;
+            fill: var(--color-surface) !important;
+        }}
+
         .st-key-options_menu_button {{
             position: fixed;
             top: 14px;
@@ -3132,7 +3168,7 @@ def render_options_menu() -> None:
         use_container_width=False,
         on_click=enter_route_mode,
         disabled=bool(st.session_state.get("route_enabled", False)),
-        help="경로 계산 모드",
+        help="본 기능은 실험적 기능입니다.",
     )
     st.button(
         "☰",
