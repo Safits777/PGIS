@@ -1061,6 +1061,9 @@ def inject_css() -> None:
             right: 12px !important;
             width: 12px !important;
             height: 12px !important;
+            box-sizing: border-box !important;
+            display: block !important;
+            padding: 0 !important;
             border-radius: 999px !important;
             border: 1px solid rgba(127, 29, 29, 0.45) !important;
             background: #ef4444 !important;
@@ -2177,6 +2180,9 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 right: 12px !important;
                 width: 12px !important;
                 height: 12px !important;
+                box-sizing: border-box !important;
+                display: block !important;
+                padding: 0 !important;
                 border-radius: 999px !important;
                 border: 1px solid rgba(127, 29, 29, 0.45) !important;
                 background: #ef4444 !important;
