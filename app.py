@@ -361,6 +361,8 @@ def inject_css() -> None:
             --record-panel-width: min(330px, calc(100vw - 24px));
             --record-panel-left: calc(100vw - 360px);
             --record-panel-top: 18px;
+            --record-panel-opacity: 0;
+            --record-panel-pointer-events: none;
             --record-danger: #ff5f57;
             --record-danger-strong: #d93630;
             --radius-sm: 5px;
@@ -597,6 +599,8 @@ def inject_css() -> None:
             );
             transition: opacity 160ms ease, box-shadow 180ms ease;
             will-change: transform, opacity;
+            opacity: var(--record-panel-opacity);
+            pointer-events: var(--record-panel-pointer-events);
             contain: layout paint style;
             z-index: 72;
         }}
@@ -638,6 +642,18 @@ def inject_css() -> None:
 
         .record-coord {{
             max-width: 100%;
+        }}
+
+        .st-key-record_lat_text,
+        .st-key-record_lng_text {{
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
         }}
 
         .st-key-right_drawer_panel [data-testid="stVerticalBlock"] {{
@@ -941,12 +957,17 @@ def inject_css() -> None:
 def inject_layout_vars() -> None:
     record_left = int(st.session_state.get("record_panel_x", 24)) + 18
     record_top = int(st.session_state.get("record_panel_y", 24)) + 18
+    record_open = bool(st.session_state.get("right_drawer_open", False))
+    record_opacity = "1" if record_open else "0"
+    record_pointer_events = "auto" if record_open else "none"
     st.markdown(
         f"""
         <style>
         :root {{
             --record-panel-left: {record_left}px;
             --record-panel-top: {record_top}px;
+            --record-panel-opacity: {record_opacity};
+            --record-panel-pointer-events: {record_pointer_events};
         }}
         </style>
         """,
@@ -1007,6 +1028,8 @@ def ensure_state() -> None:
         "record_f_value": "",
         "record_focal": "",
         "record_shutter_value_text": "",
+        "record_lat_text": f"{SEOUL_CENTER[0]:.6f}",
+        "record_lng_text": f"{SEOUL_CENTER[1]:.6f}",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1043,6 +1066,13 @@ def close_record_panel() -> None:
 def toggle_record_location_picker() -> None:
     st.session_state.picking_location = not st.session_state.picking_location
     st.session_state.right_drawer_open = True
+
+
+def parse_coordinate(value: Any, fallback: float) -> float:
+    try:
+        return round(float(str(value).strip()), 6)
+    except (TypeError, ValueError):
+        return round(float(fallback), 6)
 
 
 def escape(value: Any) -> str:
@@ -1532,24 +1562,40 @@ class RightClickSelectScript(MacroElement):
                 var labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
                 return labels[Math.floor((((degrees % 360) + 360) % 360 + 22.5) / 45) % 8];
             }
-            function sendComponentValue(payload) {
-                if (window.Streamlit && window.Streamlit.setComponentValue) {
-                    window.Streamlit.setComponentValue(payload);
-                } else {
-                    window.parent.postMessage({
-                        isStreamlitMessage: true,
-                        type: "streamlit:setComponentValue",
-                        value: payload,
-                        dataType: "json"
-                    }, "*");
-                }
-            }
             function getHostDocument() {
                 try {
                     return window.parent && window.parent.document ? window.parent.document : null;
                 } catch (error) {
                     return null;
                 }
+            }
+            function setNativeValue(input, value) {
+                if (!input) {
+                    return;
+                }
+                var inputWindow = input.ownerDocument && input.ownerDocument.defaultView ? input.ownerDocument.defaultView : window;
+                var setter = Object.getOwnPropertyDescriptor(inputWindow.HTMLInputElement.prototype, "value").set;
+                setter.call(input, value);
+                input.setAttribute("value", value);
+                input.dispatchEvent(new inputWindow.Event("input", { bubbles: true }));
+                input.dispatchEvent(new inputWindow.Event("change", { bubbles: true }));
+            }
+            function updateHostRecordCoordinates(latlng) {
+                var hostDocument = getHostDocument();
+                if (!hostDocument) {
+                    return;
+                }
+                var lat = Number(latlng.lat).toFixed(6);
+                var lng = Number(latlng.lng).toFixed(6);
+                var panel = hostDocument.querySelector(".st-key-right_drawer_panel");
+                if (panel) {
+                    var coord = panel.querySelector(".record-coord");
+                    if (coord) {
+                        coord.textContent = lat + ", " + lng;
+                    }
+                }
+                setNativeValue(hostDocument.querySelector(".st-key-record_lat_text input"), lat);
+                setNativeValue(hostDocument.querySelector(".st-key-record_lng_text input"), lng);
             }
             function setHostRecordPanelPosition(point) {
                 var hostDocument = getHostDocument();
@@ -1564,10 +1610,12 @@ class RightClickSelectScript(MacroElement):
                     "--record-panel-top",
                     Math.round(point.y + panelOffset.y) + "px"
                 );
+                hostDocument.documentElement.style.setProperty("--record-panel-opacity", "1");
+                hostDocument.documentElement.style.setProperty("--record-panel-pointer-events", "auto");
                 var panel = hostDocument.querySelector(".st-key-right_drawer_panel");
                 if (panel) {
                     panel.style.opacity = "1";
-                    panel.style.pointerEvents = "";
+                    panel.style.pointerEvents = "auto";
                 }
             }
             function hideHostRecordPanel() {
@@ -1575,11 +1623,37 @@ class RightClickSelectScript(MacroElement):
                 if (!hostDocument) {
                     return;
                 }
+                if (hostDocument.documentElement) {
+                    hostDocument.documentElement.style.setProperty("--record-panel-opacity", "0");
+                    hostDocument.documentElement.style.setProperty("--record-panel-pointer-events", "none");
+                }
                 var panel = hostDocument.querySelector(".st-key-right_drawer_panel");
                 if (panel) {
                     panel.style.opacity = "0";
                     panel.style.pointerEvents = "none";
                 }
+            }
+            function attachHostRecordPanelCloseHandler() {
+                var hostDocument = getHostDocument();
+                if (!hostDocument) {
+                    return;
+                }
+                if (hostDocument.__pgisRecordCloseHandler) {
+                    hostDocument.removeEventListener("click", hostDocument.__pgisRecordCloseHandler, true);
+                }
+                hostDocument.__pgisRecordCloseHandler = function(event) {
+                    var target = event.target;
+                    var button = target && target.closest ? target.closest(".st-key-close_record_panel button") : null;
+                    if (!button) {
+                        return;
+                    }
+                    recordPanelOpen = false;
+                    panelCloseNotified = true;
+                    selectedLatLng = null;
+                    hideHostRecordPanel();
+                    clearSelectedPointMarkers();
+                };
+                hostDocument.addEventListener("click", hostDocument.__pgisRecordCloseHandler, true);
             }
             function selectedPointIsInsideMap(point) {
                 var size = map.getSize();
@@ -1598,23 +1672,8 @@ class RightClickSelectScript(MacroElement):
                 recordPanelOpen = false;
                 panelCloseNotified = true;
                 hideHostRecordPanel();
-                var closedLatLng = selectedLatLng;
                 selectedLatLng = null;
                 clearSelectedPointMarkers();
-                var center = map.getCenter();
-                sendComponentValue({
-                    _pgis_event: "record_panel_out_of_bounds",
-                    _pgis_nonce: String(Date.now()) + "-" + Math.random().toString(36).slice(2),
-                    zoom: map.getZoom(),
-                    center: {
-                        lat: center.lat,
-                        lng: center.lng
-                    },
-                    last_clicked: closedLatLng ? {
-                        lat: closedLatLng.lat,
-                        lng: closedLatLng.lng
-                    } : null
-                });
             }
             function syncRecordPanelPosition() {
                 if (!recordPanelOpen || !selectedLatLng) {
@@ -1750,6 +1809,7 @@ class RightClickSelectScript(MacroElement):
                 bearing = ((Math.round(bearing) % 360) + 360) % 360;
                 drawDirectionPreview(selectedLatLng, bearing);
             });
+            attachHostRecordPanelCloseHandler();
             map.on("move zoom resize", requestRecordPanelSync);
             map.on("moveend zoomend", syncRecordPanelPosition);
             if (recordPanelOpen && selectedLatLng) {
@@ -1774,33 +1834,9 @@ class RightClickSelectScript(MacroElement):
                 map.closePopup();
                 drawSelectedPoint(selectedLatLng);
                 drawDirectionPreview(selectedLatLng, {{ this.default_direction }});
-                var nonce = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
-                var original = event.originalEvent || {};
                 var point = map.latLngToContainerPoint(selectedLatLng);
-                var center = map.getCenter();
+                updateHostRecordCoordinates(selectedLatLng);
                 setHostRecordPanelPosition(point);
-                var payload = {
-                    _pgis_event: "contextmenu",
-                    _pgis_nonce: nonce,
-                    zoom: map.getZoom(),
-                    center: {
-                        lat: center.lat,
-                        lng: center.lng
-                    },
-                    container_point: {
-                        x: point.x,
-                        y: point.y
-                    },
-                    client_point: {
-                        x: original.clientX || point.x,
-                        y: original.clientY || point.y
-                    },
-                    last_clicked: {
-                        lat: selectedLatLng.lat,
-                        lng: selectedLatLng.lng
-                    }
-                };
-                sendComponentValue(payload);
             });
         })();
         {% endmacro %}
@@ -2198,6 +2234,8 @@ def render_record_form() -> None:
         )
 
     with st.form("record_form", clear_on_submit=False):
+        record_lat_text = st.text_input("LAT", key="record_lat_text")
+        record_lng_text = st.text_input("LNG", key="record_lng_text")
         dial_col, main_col = st.columns([0.42, 1.0])
         with dial_col:
             direction = render_direction_dial()
@@ -2260,6 +2298,8 @@ def render_record_form() -> None:
         submitted = st.form_submit_button("마커 생성", type="primary", use_container_width=True)
 
     if submitted:
+        lat = parse_coordinate(record_lat_text, st.session_state.form_lat)
+        lng = parse_coordinate(record_lng_text, st.session_state.form_lng)
         date_value = normalize_date_value(date_text)
         clock = normalize_24h_clock(time_text)
         if not title.strip():
@@ -2296,8 +2336,6 @@ def render_record_form() -> None:
 
 @st.fragment
 def render_record_panel() -> None:
-    if not st.session_state.get("right_drawer_open", False):
-        return
     with st.container(key="right_drawer_panel"):
         render_record_form()
 
@@ -2464,6 +2502,8 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         st.session_state.selected_point = (lat, lng)
         st.session_state.form_lat = lat
         st.session_state.form_lng = lng
+        st.session_state.record_lat_text = f"{lat:.6f}"
+        st.session_state.record_lng_text = f"{lng:.6f}"
         client_point = map_data.get("client_point") or map_data.get("container_point") or {}
         try:
             st.session_state.record_panel_x = int(round(float(client_point.get("x", 24))))
@@ -2494,7 +2534,6 @@ def main() -> None:
     ensure_state()
     inject_css()
     inject_direction_preview_bridge()
-    handle_map_return(st.session_state.get("photo_spot_map"))
     spots = available_spots(st.session_state.spots)
 
     render_map(spots)
