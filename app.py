@@ -525,8 +525,15 @@ def inject_css() -> None:
         [data-testid="stBaseButton-primary"] {{
             border-color: var(--color-accent-strong) !important;
             background: var(--color-accent) !important;
-            color: var(--color-surface) !important;
+            color: #fff !important;
             font-weight: 850;
+        }}
+
+        [data-testid="stBaseButton-primary"] *,
+        .st-key-right_drawer_panel [data-testid="stBaseButton-primary"] *,
+        .st-key-right_drawer_panel button[kind="primary"] *,
+        .st-key-right_drawer_panel .stFormSubmitButton button * {{
+            color: #fff !important;
         }}
 
         .st-key-right_drawer_panel .st-key-close_record_panel button {{
@@ -542,6 +549,11 @@ def inject_css() -> None:
             font-size: 0 !important;
             line-height: 0 !important;
             box-shadow: 0 1px 3px var(--color-shadow-soft) !important;
+        }}
+
+        .st-key-right_drawer_panel .st-key-close_record_panel button *,
+        .st-key-right_drawer_panel .st-key-close_record_panel button p {{
+            display: none !important;
         }}
 
         .st-key-right_drawer_panel .st-key-close_record_panel button:hover {{
@@ -571,7 +583,10 @@ def inject_css() -> None:
             transition: color 180ms ease;
         }}
 
-        .st-key-record_long_exposure [role="checkbox"] {{
+        .st-key-record_long_exposure [role="checkbox"],
+        .st-key-record_long_exposure [role="switch"],
+        .st-key-record_long_exposure input[type="checkbox"] + div,
+        .st-key-record_long_exposure [data-testid="stToggleSwitch"] {{
             background: var(--record-toggle-off) !important;
             border-color: var(--record-toggle-off) !important;
             box-shadow: inset 0 0 0 1px var(--color-highlight), 0 1px 3px var(--color-shadow-soft) !important;
@@ -582,15 +597,57 @@ def inject_css() -> None:
                 transform 180ms ease !important;
         }}
 
-        .st-key-record_long_exposure [role="checkbox"][aria-checked="false"] {{
+        .st-key-record_long_exposure [role="checkbox"][aria-checked="false"],
+        .st-key-record_long_exposure [role="switch"][aria-checked="false"],
+        .st-key-record_long_exposure input[type="checkbox"]:not(:checked) + div {{
             background: var(--record-toggle-off) !important;
             border-color: var(--record-toggle-off) !important;
         }}
 
-        .st-key-record_long_exposure [role="checkbox"][aria-checked="true"] {{
+        .st-key-record_long_exposure [role="checkbox"][aria-checked="true"],
+        .st-key-record_long_exposure [role="switch"][aria-checked="true"],
+        .st-key-record_long_exposure input[type="checkbox"]:checked + div {{
             background: var(--record-danger) !important;
             border-color: var(--record-danger-strong) !important;
             box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.22), 0 1px 4px var(--color-shadow-soft) !important;
+        }}
+
+        .st-key-record_long_exposure [role="checkbox"]::before,
+        .st-key-record_long_exposure [role="switch"]::before,
+        .st-key-record_long_exposure input[type="checkbox"] + div::before,
+        .st-key-record_long_exposure input[type="checkbox"] + div > div,
+        .st-key-record_long_exposure [data-testid="stToggleSwitch"]::before,
+        .st-key-record_long_exposure [data-testid="stToggleSwitch"] > div {{
+            background: #fff !important;
+            border-color: #fff !important;
+            box-shadow: 0 1px 3px var(--color-shadow-soft) !important;
+        }}
+
+        .st-key-record_long_exposure [data-baseweb="checkbox"] > div,
+        .st-key-record_long_exposure label > div:first-child:has(input[type="checkbox"]),
+        .st-key-record_long_exposure label > div:first-child:has([role="checkbox"]),
+        .st-key-record_long_exposure label > div:first-child:has([role="switch"]),
+        .st-key-record_long_exposure label:has(input[type="checkbox"]:not(:checked)) > div:first-child,
+        .st-key-record_long_exposure label:has([aria-checked="false"]) > div:first-child {{
+            background: var(--record-toggle-off) !important;
+            border-color: var(--record-toggle-off) !important;
+        }}
+
+        .st-key-record_long_exposure [data-baseweb="checkbox"]:has(input[type="checkbox"]:checked) > div,
+        .st-key-record_long_exposure label:has(input[type="checkbox"]:checked) > div:first-child,
+        .st-key-record_long_exposure label:has([aria-checked="true"]) > div:first-child {{
+            background: var(--record-danger) !important;
+            border-color: var(--record-danger-strong) !important;
+        }}
+
+        .st-key-record_long_exposure [data-baseweb="checkbox"] > div::before,
+        .st-key-record_long_exposure [data-baseweb="checkbox"] > div::after,
+        .st-key-record_long_exposure [data-baseweb="checkbox"] > div > div,
+        .st-key-record_long_exposure input[type="checkbox"] + div::before,
+        .st-key-record_long_exposure input[type="checkbox"] + div::after,
+        .st-key-record_long_exposure input[type="checkbox"] + div > div {{
+            background: #fff !important;
+            border-color: #fff !important;
         }}
 
         .st-key-record_long_exposure [role="checkbox"]:hover {{
@@ -650,6 +707,13 @@ def inject_css() -> None:
         [data-testid="stMarkdownContainer"],
         [data-testid="stCaptionContainer"] {{
             color: var(--color-text);
+        }}
+
+        [data-testid="stBaseButton-primary"] [data-testid="stMarkdownContainer"],
+        [data-testid="stBaseButton-primary"] [data-testid="stMarkdownContainer"] *,
+        .st-key-right_drawer_panel .stFormSubmitButton button [data-testid="stMarkdownContainer"],
+        .st-key-right_drawer_panel .stFormSubmitButton button [data-testid="stMarkdownContainer"] * {{
+            color: #fff !important;
         }}
 
         div[data-testid="stFileUploaderDropzone"] {{
@@ -1685,7 +1749,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             fill=True,
             fill_color=color,
             fill_opacity=0.92 if active else 0.72,
-            tooltip=f"{spot['id']} · {spot['title']}",
+            tooltip=str(spot.get("title") or ""),
             popup=folium.Popup(record_popup_html(spot), max_width=320),
             bubbling_mouse_events=False,
         ).add_to(fmap)
@@ -1906,7 +1970,7 @@ def render_record_form() -> None:
             unsafe_allow_html=True,
         )
     with close_col:
-        close_clicked = st.button("닫기", key="close_record_panel", help="닫기", use_container_width=False)
+        close_clicked = st.button(" ", key="close_record_panel", help="닫기", use_container_width=False)
     if close_clicked:
         clear_record_selection()
         st.rerun()
