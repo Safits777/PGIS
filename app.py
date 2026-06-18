@@ -655,19 +655,6 @@ def inject_css() -> None:
             box-shadow: 0 1px 3px var(--color-shadow-soft) !important;
         }}
 
-        .st-key-record_long_exposure [data-baseweb="checkbox"] > div {{
-            background: var(--record-toggle-off) !important;
-            border-color: var(--record-toggle-off) !important;
-        }}
-
-        .st-key-record_long_exposure [data-baseweb="checkbox"]:has(input[type="checkbox"]:checked) > div {{
-            background: var(--record-danger) !important;
-            border-color: var(--record-danger-strong) !important;
-        }}
-
-        .st-key-record_long_exposure [data-baseweb="checkbox"] > div::before,
-        .st-key-record_long_exposure [data-baseweb="checkbox"] > div::after,
-        .st-key-record_long_exposure [data-baseweb="checkbox"] > div > div,
         .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"]))::before,
         .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"]))::after,
         .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) > div {{
