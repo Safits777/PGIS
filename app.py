@@ -22,7 +22,8 @@ import streamlit.components.v1 as components
 APP_DIR = Path(__file__).resolve().parent
 INDEX_HTML_PATH = APP_DIR / "index.html"
 SPOT_DATA_DIR = APP_DIR / "data" / "spots"
-SPOT_DATA_GLOB = "*.json"
+SPOT_DATA_FILE = SPOT_DATA_DIR / "spots.json"
+LEGACY_SPOT_DATA_FILE = SPOT_DATA_DIR / "sample_spots.json"
 COLOR_TOKEN_RE = re.compile(r"--(color-[a-z0-9-]+)\s*:\s*([^;]+);", re.IGNORECASE)
 COLOR_TOKEN_FALLBACKS = {
     "color-canvas": "#f7f8f6",
@@ -65,9 +66,11 @@ def css_color_token_block() -> str:
 
 
 def spot_data_files() -> list[Path]:
-    if not SPOT_DATA_DIR.exists():
-        return []
-    return sorted(path for path in SPOT_DATA_DIR.glob(SPOT_DATA_GLOB) if path.is_file())
+    if SPOT_DATA_FILE.is_file():
+        return [SPOT_DATA_FILE]
+    if LEGACY_SPOT_DATA_FILE.is_file():
+        return [LEGACY_SPOT_DATA_FILE]
+    return []
 
 
 def spots_from_payload(payload: Any) -> list[dict[str, Any]]:
@@ -89,6 +92,27 @@ def load_spot_records() -> list[dict[str, Any]]:
             continue
         spots.extend(spots_from_payload(payload))
     return spots
+
+
+def save_spot_records(spots: list[dict[str, Any]]) -> None:
+    SPOT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": 1,
+        "kind": "pgis.spots",
+        "spots": [normalize_spot(spot, index + 1) for index, spot in enumerate(spots)],
+    }
+    temp_path = SPOT_DATA_FILE.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temp_path.replace(SPOT_DATA_FILE)
+
+
+def persist_spots() -> bool:
+    try:
+        save_spot_records(st.session_state.spots)
+        return True
+    except OSError as exc:
+        st.error(f"spots.json 저장에 실패했습니다: {exc}")
+        return False
 
 
 def _inside_streamlit() -> bool:
@@ -870,6 +894,9 @@ def ensure_state() -> None:
         normalize_spot(spot, index + 1)
         for index, spot in enumerate(st.session_state.get("spots", []))
     ]
+    visible_spots = available_spots(st.session_state.spots)
+    if not any(spot["id"] == st.session_state.active_spot_id for spot in visible_spots):
+        st.session_state.active_spot_id = visible_spots[0]["id"] if visible_spots else None
 
 
 def selected_point_value(default: tuple[float, float] | None = SEOUL_CENTER) -> tuple[float, float] | None:
@@ -903,6 +930,18 @@ def spot_drct(spot: dict[str, Any]) -> int:
         return int(float(spot.get("drct", spot.get("direction", 0)))) % 360
     except (TypeError, ValueError):
         return 0
+
+
+def spot_available(spot: dict[str, Any]) -> int:
+    value = spot.get("Available", spot.get("available", 1))
+    try:
+        return 1 if int(float(value)) == 1 else 0
+    except (TypeError, ValueError):
+        return 1
+
+
+def available_spots(spots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [spot for spot in spots if spot_available(spot) == 1]
 
 
 def spot_url(spot: dict[str, Any]) -> str:
@@ -1033,6 +1072,7 @@ def normalize_spot(spot: dict[str, Any], fallback_id: int | None = None) -> dict
         "lat": float(spot.get("lat", SEOUL_CENTER[0])),
         "lng": float(spot.get("lng", SEOUL_CENTER[1])),
         "drct": spot_drct(spot),
+        "Available": spot_available(spot),
         "weather": weather,
         "time": normalize_time_value(str(time_value or "")),
         "date": normalize_date_value(str(date_value or "")) or "",
@@ -1662,7 +1702,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     center = st.session_state.get("map_center") or selected_point_value() or SEOUL_CENTER
     active_spot = None
     if st.session_state.active_spot_id:
-        active_spot = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
+        active_spot = next((spot for spot in spots if spot["id"] == st.session_state.active_spot_id), None)
         if active_spot:
             center = (active_spot["lat"], active_spot["lng"])
     tile_url = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
@@ -1783,6 +1823,7 @@ def spot_csv(spots: list[dict[str, Any]]) -> bytes:
             "id",
             "title",
             "URL",
+            "Available",
             "lat",
             "lng",
             "drct",
@@ -1798,6 +1839,7 @@ def spot_csv(spots: list[dict[str, Any]]) -> bytes:
     for spot in spots:
         row = {key: spot.get(key, "") for key in writer.fieldnames}
         row["URL"] = spot_url(spot)
+        row["Available"] = spot_available(spot)
         row["drct"] = spot_drct(spot)
         row["comp"] = json.dumps(spot_comp(spot), ensure_ascii=False)
         writer.writerow(row)
@@ -1861,7 +1903,7 @@ def add_spot(
     comp: dict[str, str] | None = None,
     *,
     url: str = "",
-) -> None:
+) -> bool:
     next_id = max([spot["id"] for spot in st.session_state.spots], default=0) + 1
     spot = {
         "id": next_id,
@@ -1870,6 +1912,7 @@ def add_spot(
         "lat": float(lat),
         "lng": float(lng),
         "drct": int(drct) % 360,
+        "Available": 1,
         "weather": weather or WEATHER_OPTIONS[0],
         "date": date_value.strip(),
         "body": body.strip(),
@@ -1883,6 +1926,17 @@ def add_spot(
     st.session_state.map_center = (spot["lat"], spot["lng"])
     st.session_state.form_lat = spot["lat"]
     st.session_state.form_lng = spot["lng"]
+    return persist_spots()
+
+
+def hide_spot(spot_id: int) -> bool:
+    for spot in st.session_state.spots:
+        if spot["id"] == spot_id:
+            spot["Available"] = 0
+            break
+    visible_spots = available_spots(st.session_state.spots)
+    st.session_state.active_spot_id = visible_spots[0]["id"] if visible_spots else None
+    return persist_spots()
 
 
 def render_form() -> None:
@@ -1954,7 +2008,7 @@ def render_form() -> None:
         elif not normalize_24h_clock(time_text):
             st.error("시간은 24시간 형식으로 입력해주세요. 예: 17:30")
         else:
-            add_spot(
+            saved = add_spot(
                 title,
                 lat,
                 lng,
@@ -1965,8 +2019,9 @@ def render_form() -> None:
                 lens=camera,
                 url=memo,
             )
-            st.success("스팟이 지도에 추가됐습니다.")
-            st.rerun()
+            if saved:
+                st.success("스팟이 지도에 추가됐습니다.")
+                st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -2071,7 +2126,7 @@ def render_record_form() -> None:
         elif not st.session_state.record_long_exposure and shutter_raw.strip() and not shutter_raw.strip().isdigit():
             st.error("셔터스피드 1/N은 숫자로 입력하세요.")
         else:
-            add_spot(
+            saved = add_spot(
                 title,
                 lat,
                 lng,
@@ -2084,9 +2139,10 @@ def render_record_form() -> None:
                 comp=comp,
                 url=url,
             )
-            clear_record_selection()
-            st.success("마커를 추가했습니다.")
-            st.rerun()
+            if saved:
+                clear_record_selection()
+                st.success("마커를 추가했습니다.")
+                st.rerun()
 
 
 def render_active_detail() -> None:
@@ -2138,9 +2194,8 @@ def render_active_detail() -> None:
             st.rerun()
     with col_delete:
         if st.button("삭제", use_container_width=True):
-            st.session_state.spots = [spot for spot in st.session_state.spots if spot["id"] != active["id"]]
-            st.session_state.active_spot_id = st.session_state.spots[0]["id"] if st.session_state.spots else None
-            st.rerun()
+            if hide_spot(active["id"]):
+                st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -2205,9 +2260,8 @@ def render_record_detail() -> None:
             st.rerun()
     with col_delete:
         if st.button("DELETE", use_container_width=True):
-            st.session_state.spots = [spot for spot in st.session_state.spots if spot["id"] != active["id"]]
-            st.session_state.active_spot_id = st.session_state.spots[0]["id"] if st.session_state.spots else None
-            st.rerun()
+            if hide_spot(active["id"]):
+                st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -2284,7 +2338,7 @@ def main() -> None:
     inject_css()
     inject_direction_preview_bridge()
     handle_map_return(st.session_state.get("photo_spot_map"))
-    spots = st.session_state.spots
+    spots = available_spots(st.session_state.spots)
 
     render_map(spots)
     inject_layout_vars()
