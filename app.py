@@ -25,6 +25,7 @@ SPOT_DATA_DIR = APP_DIR / "data" / "spots"
 SPOT_DATA_FILE = SPOT_DATA_DIR / "spots.json"
 LEGACY_SPOT_DATA_FILE = SPOT_DATA_DIR / "sample_spots.json"
 DATABASE_URL_ENV_KEYS = ("DATABASE_URL", "PGIS_DATABASE_URL", "POSTGRES_URL")
+DEFAULT_SPOT_PASSWORD = "shzzang0222"
 COLOR_TOKEN_RE = re.compile(r"--(color-[a-z0-9-]+)\s*:\s*([^;]+);", re.IGNORECASE)
 COLOR_TOKEN_FALLBACKS = {
     "color-canvas": "#f7f8f6",
@@ -115,6 +116,7 @@ CREATE TABLE IF NOT EXISTS spots (
     body text NOT NULL DEFAULT '',
     lens text NOT NULL DEFAULT '',
     comp jsonb NOT NULL DEFAULT '{}'::jsonb,
+    password text NOT NULL DEFAULT 'shzzang0222',
     available integer NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
@@ -136,6 +138,7 @@ SELECT
     body,
     lens,
     comp,
+    password,
     available AS "Available"
 FROM spots
 ORDER BY id;
@@ -156,9 +159,10 @@ INSERT INTO spots (
     body,
     lens,
     comp,
+    password,
     available
 ) VALUES (
-    %s, %s, %s, %s, %s, %s, %s, NULLIF(%s, '')::date, NULLIF(%s, '')::time, %s, %s, %s, %s
+    %s, %s, %s, %s, %s, %s, %s, NULLIF(%s, '')::date, NULLIF(%s, '')::time, %s, %s, %s, %s, %s
 )
 ON CONFLICT (id) DO UPDATE SET
     title = EXCLUDED.title,
@@ -172,6 +176,7 @@ ON CONFLICT (id) DO UPDATE SET
     body = EXCLUDED.body,
     lens = EXCLUDED.lens,
     comp = EXCLUDED.comp,
+    password = EXCLUDED.password,
     available = EXCLUDED.available,
     updated_at = now();
 """
@@ -188,6 +193,8 @@ def import_database_driver() -> tuple[Any, Any, Any]:
 def ensure_spots_table(conn: Any) -> None:
     with conn.cursor() as cur:
         cur.execute(SPOTS_TABLE_SQL)
+        cur.execute("ALTER TABLE spots ADD COLUMN IF NOT EXISTS password text NOT NULL DEFAULT 'shzzang0222';")
+        cur.execute("UPDATE spots SET password = 'shzzang0222' WHERE password IS NULL OR password = '';")
 
 
 def load_spot_records_from_database() -> list[dict[str, Any]] | None:
@@ -230,6 +237,7 @@ def save_spot_records_to_database(spots: list[dict[str, Any]]) -> bool:
                             spot["body"],
                             spot["lens"],
                             Jsonb(spot_comp(spot)),
+                            spot_password(spot),
                             spot_available(spot),
                         ),
                     )
@@ -921,15 +929,21 @@ def inject_css() -> None:
         }}
 
         .leaflet-popup-close-button {{
-            color: var(--color-muted) !important;
-            font-size: 20px !important;
-            font-weight: 900 !important;
+            top: 12px !important;
+            right: 12px !important;
+            width: 12px !important;
+            height: 12px !important;
+            border-radius: 999px !important;
+            border: 1px solid rgba(127, 29, 29, 0.45) !important;
+            background: #ef4444 !important;
+            color: transparent !important;
+            font-size: 0 !important;
+            line-height: 0 !important;
             text-shadow: none !important;
         }}
 
         .leaflet-popup-close-button:hover {{
-            color: var(--color-text) !important;
-            background: transparent !important;
+            background: #dc2626 !important;
         }}
 
         @media (max-width: 900px) {{
@@ -1026,6 +1040,8 @@ def ensure_state() -> None:
         "picking_location": False,
         "last_context_click_nonce": None,
         "last_panel_close_nonce": None,
+        "last_delete_spot_nonce": None,
+        "delete_feedback": "",
         "record_direction": 45,
         "record_date_text": now.strftime("%Y-%m-%d"),
         "record_time_text": now.strftime("%H:%M"),
@@ -1103,6 +1119,11 @@ def spot_available(spot: dict[str, Any]) -> int:
         return 1 if int(float(value)) == 1 else 0
     except (TypeError, ValueError):
         return 1
+
+
+def spot_password(spot: dict[str, Any]) -> str:
+    password = str(spot.get("password") or "").strip()
+    return password or DEFAULT_SPOT_PASSWORD
 
 
 def available_spots(spots: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1244,6 +1265,7 @@ def normalize_spot(spot: dict[str, Any], fallback_id: int | None = None) -> dict
         "body": str(spot.get("body") or "").strip(),
         "lens": str(spot.get("lens") or spot.get("camera") or "").strip(),
         "comp": comp,
+        "password": spot_password(spot),
     }
 
 
@@ -1389,8 +1411,11 @@ def record_popup_html(spot: dict[str, Any]) -> str:
             )
             + "</div>"
         )
+    spot_id = int(spot.get("id", 0))
     return f"""
-    <div style="width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};">
+    <div style="position:relative;width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};padding-top:16px;">
+        <button type="button" class="pgis-popup-delete" data-spot-id="{spot_id}" title="삭제"
+            style="position:absolute;top:0;right:32px;width:12px;height:12px;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;padding:0;cursor:pointer;font-size:0;line-height:0;"></button>
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
             <div style="font-size:12px;color:{muted};font-weight:800;text-transform:uppercase;">SPOT NODE</div>
             <div style="font-size:16px;font-weight:900;line-height:1.25;color:{text};">{escape(spot.get("title"))}</div>
@@ -1534,6 +1559,63 @@ class DirectionClickScript(MacroElement):
         self.color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
         self.surface = ui_color("color-surface")
         self.text = ui_color("color-text")
+
+
+class SpotDeleteScript(MacroElement):
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function() {
+            var map = {{ this.map_name }};
+            function streamlitValue(payload) {
+                payload.center = map.getCenter();
+                payload.zoom = map.getZoom();
+                if (window.__GLOBAL_DATA__) {
+                    window.__GLOBAL_DATA__.previous_data = payload;
+                }
+                if (window.Streamlit && window.Streamlit.setComponentValue) {
+                    window.Streamlit.setComponentValue(payload);
+                    return;
+                }
+                window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: "streamlit:setComponentValue",
+                    value: payload,
+                    dataType: "json"
+                }, "*");
+            }
+            document.addEventListener("click", function(event) {
+                var target = event.target;
+                var button = target && target.closest ? target.closest(".pgis-popup-delete") : null;
+                if (!button) {
+                    return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                var spotId = Number(button.getAttribute("data-spot-id"));
+                if (!Number.isFinite(spotId) || spotId <= 0) {
+                    return;
+                }
+                var password = window.prompt("삭제 password를 입력하세요.");
+                if (password === null) {
+                    return;
+                }
+                streamlitValue({
+                    _pgis_event: "delete_spot",
+                    _pgis_nonce: String(Date.now()) + "-" + String(Math.random()),
+                    spot_id: spotId,
+                    password: password
+                });
+            }, true);
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(self, fmap: folium.Map) -> None:
+        super().__init__()
+        self._name = "SpotDeleteScript"
+        self.map_name = fmap.get_name()
 
 
 class RightClickSelectScript(MacroElement):
@@ -1952,13 +2034,20 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 margin: 12px !important;
             }}
             .leaflet-popup-close-button {{
-                color: {popup_text} !important;
-                font-weight: 900 !important;
+                top: 12px !important;
+                right: 12px !important;
+                width: 12px !important;
+                height: 12px !important;
+                border-radius: 999px !important;
+                border: 1px solid rgba(127, 29, 29, 0.45) !important;
+                background: #ef4444 !important;
+                color: transparent !important;
+                font-size: 0 !important;
+                line-height: 0 !important;
                 text-shadow: none !important;
             }}
             .leaflet-popup-close-button:hover {{
-                background: transparent !important;
-                color: {popup_close_hover} !important;
+                background: #dc2626 !important;
             }}
             .pgis-direction-label {{
                 background: transparent !important;
@@ -1981,6 +2070,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         )
     )
     RightClickSelectScript(fmap).add_to(fmap)
+    SpotDeleteScript(fmap).add_to(fmap)
 
     for spot in spots:
         color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
@@ -2019,6 +2109,7 @@ def spot_csv(spots: list[dict[str, Any]]) -> bytes:
             "body",
             "lens",
             "comp",
+            "password",
         ],
     )
     writer.writeheader()
@@ -2089,6 +2180,7 @@ def add_spot(
     comp: dict[str, str] | None = None,
     *,
     url: str = "",
+    password: str = "",
 ) -> bool:
     next_id = max([spot["id"] for spot in st.session_state.spots], default=0) + 1
     spot = {
@@ -2104,6 +2196,7 @@ def add_spot(
         "body": body.strip(),
         "lens": lens.strip(),
         "time": time_value.strip(),
+        "password": password.strip(),
         "comp": comp or {"F값": "", "ISO값": "", "셔터스피드": "", "화각": ""},
     }
     st.session_state.spots.append(spot)
@@ -2123,6 +2216,24 @@ def hide_spot(spot_id: int) -> bool:
     visible_spots = available_spots(st.session_state.spots)
     st.session_state.active_spot_id = visible_spots[0]["id"] if visible_spots else None
     return persist_spots()
+
+
+def hide_spot_with_password(spot_id: int, password: str) -> bool:
+    for spot in st.session_state.spots:
+        if int(spot.get("id", 0)) != int(spot_id):
+            continue
+        if str(password or "").strip() != spot_password(spot):
+            st.toast("password가 일치하지 않아 삭제하지 않았습니다.", icon="!")
+            return False
+        spot["Available"] = 0
+        visible_spots = available_spots(st.session_state.spots)
+        st.session_state.active_spot_id = visible_spots[0]["id"] if visible_spots else None
+        if persist_spots():
+            st.session_state.delete_feedback = "deleted"
+            return True
+        return False
+    st.toast("삭제할 지점을 찾지 못했습니다.", icon="!")
+    return False
 
 
 def render_form() -> None:
@@ -2184,11 +2295,14 @@ def render_form() -> None:
 
         uploaded_file = st.file_uploader("사진", type=["jpg", "jpeg", "png", "webp"])
         memo = st.text_input("링크", placeholder="https://example.com")
+        password = st.text_input("password", type="password", placeholder="삭제 시 사용할 비밀번호")
         submitted = st.form_submit_button("마커 생성", type="primary", use_container_width=True)
 
     if submitted:
         if not title.strip():
             st.error("스팟명을 입력해주세요.")
+        elif not password.strip():
+            st.error("password를 입력해 주세요.")
         elif memo.strip() and not is_valid_link(memo):
             st.error("링크는 http:// 또는 https:// 형식으로 입력해주세요.")
         elif not normalize_date_value(date_text):
@@ -2206,6 +2320,7 @@ def render_form() -> None:
                 time_value=normalize_time_value(time_text),
                 lens=camera,
                 url=memo,
+                password=password,
             )
             if saved:
                 st.success("스팟이 지도에 추가됐습니다.")
@@ -2247,6 +2362,7 @@ def render_record_form() -> None:
         with main_col:
             title = st.text_input("제목", placeholder="촬영 지점 이름", key="record_title")
             url = st.text_input("URL", placeholder="https://instagram.com/...", key="record_url")
+            password = st.text_input("password", type="password", placeholder="삭제 시 사용할 비밀번호", key="record_password")
 
         weather_col, date_col, time_col = st.columns([0.9, 1.0, 0.78])
         with weather_col:
@@ -2309,6 +2425,8 @@ def render_record_form() -> None:
         clock = normalize_24h_clock(time_text)
         if not title.strip():
             st.error("제목을 입력하세요.")
+        elif not password.strip():
+            st.error("password를 입력해 주세요.")
         elif url.strip() and not is_valid_link(url):
             st.error("URL은 http:// 또는 https:// 형식이어야 합니다.")
         elif not date_value:
@@ -2332,6 +2450,7 @@ def render_record_form() -> None:
                 lens=lens,
                 comp=comp,
                 url=url,
+                password=password,
             )
             if saved:
                 clear_record_selection()
@@ -2492,6 +2611,20 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         store_map_view(map_data)
         clear_record_selection()
         return
+    if event_type == "delete_spot":
+        nonce = map_data.get("_pgis_nonce")
+        if nonce and nonce == st.session_state.get("last_delete_spot_nonce"):
+            return
+        st.session_state.last_delete_spot_nonce = nonce
+        store_map_view(map_data)
+        try:
+            spot_id = int(map_data.get("spot_id"))
+        except (TypeError, ValueError):
+            st.toast("삭제할 지점을 찾지 못했습니다.", icon="!")
+            return
+        if hide_spot_with_password(spot_id, str(map_data.get("password") or "")):
+            st.rerun()
+        return
     if event_type != "contextmenu":
         return
 
@@ -2539,6 +2672,9 @@ def main() -> None:
     ensure_state()
     inject_css()
     inject_direction_preview_bridge()
+    if st.session_state.get("delete_feedback") == "deleted":
+        st.toast("지점을 삭제했습니다.", icon="OK")
+        st.session_state.delete_feedback = ""
     spots = available_spots(st.session_state.spots)
 
     render_map(spots)

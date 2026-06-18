@@ -20,7 +20,8 @@
         "셔터스피드": "1/750",
         "화각": "261mm"
       },
-      "Available": 1
+      "Available": 1,
+      "password": "shzzang0222"
     },
     {
       "id": 2,
@@ -40,7 +41,8 @@
         "셔터스피드": "1/500",
         "화각": "68mm"
       },
-      "Available": 1
+      "Available": 1,
+      "password": "shzzang0222"
     },
     {
       "id": 3,
@@ -60,7 +62,8 @@
         "셔터스피드": "1/744",
         "화각": "69mm"
       },
-      "Available": 1
+      "Available": 1,
+      "password": "shzzang0222"
     }
   ]
 }
