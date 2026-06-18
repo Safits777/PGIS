@@ -1870,6 +1870,21 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             .leaflet-container {{
                 background: {map_bg};
             }}
+            .folium-map,
+            .leaflet-container,
+            .leaflet-container.leaflet-grab,
+            .leaflet-container .leaflet-grab,
+            .leaflet-container .leaflet-interactive,
+            .leaflet-container .leaflet-marker-icon,
+            .leaflet-container .leaflet-marker-shadow,
+            .leaflet-container .leaflet-control,
+            .leaflet-container .leaflet-control *,
+            .leaflet-container a,
+            .leaflet-dragging .leaflet-container,
+            .leaflet-dragging .leaflet-grab,
+            .leaflet-dragging .leaflet-marker-draggable {{
+                cursor: default !important;
+            }}
             .leaflet-tile-pane img {{
                 filter: saturate(1.22) contrast(1.04);
             }}
