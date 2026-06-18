@@ -205,7 +205,6 @@ def inject_css() -> None:
             --record-panel-top: 18px;
             --record-danger: #ff5f57;
             --record-danger-strong: #d93630;
-            --record-toggle-off: #3f464d;
             --radius-sm: 5px;
             --radius-md: 8px;
             --radius-pill: 999px;
@@ -607,59 +606,40 @@ def inject_css() -> None:
             transition: color 180ms ease;
         }}
 
-        .st-key-record_long_exposure [role="checkbox"],
-        .st-key-record_long_exposure [role="switch"],
-        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])),
-        .st-key-record_long_exposure [data-testid="stToggleSwitch"] {{
-            background: var(--record-toggle-off) !important;
-            border-color: var(--record-toggle-off) !important;
+        .st-key-record_long_exposure [data-baseweb="checkbox"] {{
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 0.42rem !important;
+        }}
+
+        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) {{
+            background: var(--color-surface) !important;
+            border: 1.5px solid var(--color-border-strong) !important;
+            border-radius: 4px !important;
             box-shadow: inset 0 0 0 1px var(--color-highlight), 0 1px 3px var(--color-shadow-soft) !important;
             transition:
                 background-color 180ms ease,
                 border-color 180ms ease,
-                box-shadow 180ms ease,
-                transform 180ms ease !important;
+                box-shadow 180ms ease !important;
         }}
 
-        .st-key-record_long_exposure input[type="checkbox"] {{
-            position: absolute !important;
-            width: 0 !important;
-            height: 0 !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-        }}
-
-        .st-key-record_long_exposure [role="checkbox"][aria-checked="false"],
-        .st-key-record_long_exposure [role="switch"][aria-checked="false"],
-        .st-key-record_long_exposure input[type="checkbox"]:not(:checked) + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) {{
-            background: var(--record-toggle-off) !important;
-            border-color: var(--record-toggle-off) !important;
-        }}
-
-        .st-key-record_long_exposure [role="checkbox"][aria-checked="true"],
-        .st-key-record_long_exposure [role="switch"][aria-checked="true"],
         .st-key-record_long_exposure input[type="checkbox"]:checked + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) {{
             background: var(--record-danger) !important;
             border-color: var(--record-danger-strong) !important;
+            box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.2), 0 1px 4px var(--color-shadow-soft) !important;
+        }}
+
+        .st-key-record_long_exposure [data-baseweb="checkbox"]:hover input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) {{
+            border-color: var(--record-danger) !important;
+        }}
+
+        .st-key-record_long_exposure input[type="checkbox"]:focus-visible + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) {{
             box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.22), 0 1px 4px var(--color-shadow-soft) !important;
         }}
 
-        .st-key-record_long_exposure [role="checkbox"]::before,
-        .st-key-record_long_exposure [role="switch"]::before,
-        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"]))::before,
-        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) > div,
-        .st-key-record_long_exposure [data-testid="stToggleSwitch"]::before,
-        .st-key-record_long_exposure [data-testid="stToggleSwitch"] > div {{
-            background: #fff !important;
-            border-color: #fff !important;
-            box-shadow: 0 1px 3px var(--color-shadow-soft) !important;
-        }}
-
-        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"]))::before,
-        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"]))::after,
-        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) > div {{
-            background: #fff !important;
-            border-color: #fff !important;
+        .st-key-record_long_exposure input[type="checkbox"]:checked + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) svg {{
+            color: #fff !important;
+            fill: #fff !important;
         }}
 
         .st-key-record_shutter_value_text label [data-testid="stMarkdownContainer"] p {{
@@ -678,10 +658,6 @@ def inject_css() -> None:
         .st-key-right_drawer_panel:has(.st-key-record_long_exposure input[type="checkbox"]:checked) .st-key-record_shutter_value_text label [data-testid="stMarkdownContainer"] p::after,
         .st-key-right_drawer_panel:has(.st-key-record_long_exposure [aria-checked="true"]) .st-key-record_shutter_value_text label [data-testid="stMarkdownContainer"] p::after {{
             content: "셔터 N";
-        }}
-
-        .st-key-record_long_exposure [role="checkbox"]:hover {{
-            transform: translateY(-1px);
         }}
 
         .st-key-right_drawer_panel [data-testid="stExpander"] details,
@@ -2086,7 +2062,7 @@ def render_record_form() -> None:
             with focal_col:
                 focal = st.text_input("화각", placeholder="35mm", key="record_focal")
 
-            long_exposure = st.toggle("장노출", key="record_long_exposure")
+            long_exposure = st.checkbox("장노출", key="record_long_exposure")
 
             comp = {
                 "F값": f_value.strip(),
