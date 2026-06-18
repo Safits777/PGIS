@@ -516,129 +516,6 @@ def inject_css() -> None:
             font-weight: 750;
         }}
 
-        .st-key-route_activate_button {{
-            position: fixed;
-            right: 14px;
-            bottom: 14px;
-            z-index: 96;
-        }}
-
-        .st-key-route_activate_button button {{
-            min-width: 86px;
-            min-height: 40px;
-            border-color: var(--color-accent-strong) !important;
-            background: var(--color-accent) !important;
-            color: #fff !important;
-            font-weight: 850;
-            box-shadow: 0 12px 30px var(--color-shadow);
-        }}
-
-        .st-key-route_activate_button button * {{
-            color: #fff !important;
-        }}
-
-        .st-key-route_panel {{
-            position: fixed;
-            top: 68px;
-            right: 14px;
-            z-index: 94;
-            width: min(280px, calc(100vw - 28px));
-            max-height: calc(100vh - 82px);
-            padding: 0.8rem;
-            overflow-y: auto;
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-md);
-            background: var(--color-surface);
-            box-shadow: 0 18px 44px var(--color-shadow);
-            animation: route-panel-in 180ms cubic-bezier(.2, .8, .2, 1);
-        }}
-
-        .st-key-route_panel [data-testid="stVerticalBlock"] {{
-            gap: 0.55rem;
-        }}
-
-        .route-panel-head {{
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            gap: 0.75rem;
-            padding-bottom: 0.55rem;
-            border-bottom: 1px solid var(--color-border);
-        }}
-
-        .route-panel-title {{
-            margin: 0;
-            color: var(--color-text);
-            font-size: 0.9rem;
-            line-height: 1.2;
-            font-weight: 900;
-        }}
-
-        .route-panel-count {{
-            color: var(--color-muted);
-            font-size: 0.72rem;
-            font-weight: 800;
-        }}
-
-        .route-list {{
-            margin: 0;
-            padding: 0;
-            list-style: none;
-        }}
-
-        .route-list-item {{
-            display: grid;
-            grid-template-columns: 24px minmax(0, 1fr);
-            gap: 0.55rem;
-            align-items: center;
-            min-height: 38px;
-            padding: 0.42rem 0;
-            border-bottom: 1px solid var(--color-border);
-        }}
-
-        .route-list-item:last-child {{
-            border-bottom: 0;
-        }}
-
-        .route-list-order {{
-            display: grid;
-            place-items: center;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: var(--color-accent);
-            color: #fff;
-            font: 900 0.7rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        }}
-
-        .route-list-title {{
-            overflow: hidden;
-            color: var(--color-text);
-            font-size: 0.8rem;
-            font-weight: 800;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }}
-
-        .route-list-empty {{
-            margin: 0;
-            padding: 0.55rem 0;
-            color: var(--color-muted);
-            font-size: 0.78rem;
-            line-height: 1.45;
-        }}
-
-        @keyframes route-panel-in {{
-            from {{
-                transform: translateX(10px);
-                opacity: 0;
-            }}
-            to {{
-                transform: translateX(0);
-                opacity: 1;
-            }}
-        }}
-
         .block-container {{
             width: 100vw;
             max-width: 100vw;
@@ -1306,6 +1183,7 @@ def ensure_state() -> None:
         "route_mode": "차량",
         "route_spot_ids": [],
         "route_coordinates": [],
+        "route_segment_distances": [],
         "route_error": "",
         "route_result_signature": None,
         "last_route_spot_nonce": None,
@@ -1368,6 +1246,7 @@ def clear_route_selection() -> None:
 
 def invalidate_route_result() -> None:
     st.session_state.route_coordinates = []
+    st.session_state.route_segment_distances = []
     st.session_state.route_error = ""
     st.session_state.route_result_signature = None
 
@@ -1377,12 +1256,6 @@ def route_signature() -> tuple[str, tuple[int, ...]]:
         str(st.session_state.get("route_mode", "차량")),
         tuple(int(spot_id) for spot_id in st.session_state.get("route_spot_ids", [])),
     )
-
-
-def activate_route_mode() -> None:
-    st.session_state.route_enabled = True
-    st.session_state.options_panel_open = False
-    clear_record_selection()
 
 
 def exit_route_mode() -> None:
@@ -1803,24 +1676,6 @@ class DirectionClickScript(MacroElement):
             var surface = "{{ this.surface }}";
             var text = "{{ this.text }}";
             var spotId = {{ this.spot_id }};
-            var routeEnabled = {{ this.route_enabled }};
-            function streamlitValue(payload) {
-                payload.center = map.getCenter();
-                payload.zoom = map.getZoom();
-                if (window.__GLOBAL_DATA__) {
-                    window.__GLOBAL_DATA__.previous_data = payload;
-                }
-                if (window.Streamlit && window.Streamlit.setComponentValue) {
-                    window.Streamlit.setComponentValue(payload);
-                    return;
-                }
-                window.parent.postMessage({
-                    isStreamlitMessage: true,
-                    type: "streamlit:setComponentValue",
-                    value: payload,
-                    dataType: "json"
-                }, "*");
-            }
             function clearDirectionLayer() {
                 if (window.__pgisDirectionLayer) {
                     map.removeLayer(window.__pgisDirectionLayer);
@@ -1832,13 +1687,9 @@ class DirectionClickScript(MacroElement):
                     L.DomEvent.stopPropagation(event.originalEvent);
                 }
                 clearDirectionLayer();
-                if (routeEnabled) {
+                if (window.__pgisRouteModeActive && window.__pgisSelectRouteSpot) {
                     marker.closePopup();
-                    streamlitValue({
-                        _pgis_event: "route_spot_click",
-                        _pgis_nonce: String(Date.now()) + "-" + String(Math.random()),
-                        spot_id: spotId
-                    });
+                    window.__pgisSelectRouteSpot(spotId);
                     return;
                 }
                 window.__pgisDirectionLayer = L.layerGroup([
@@ -1892,7 +1743,6 @@ class DirectionClickScript(MacroElement):
         self.map_name = fmap.get_name()
         self.marker_name = marker_name
         self.spot_id = int(spot.get("id", 0))
-        self.route_enabled = "true" if st.session_state.get("route_enabled", False) else "false"
         self.start_lat = f"{float(spot['lat']):.8f}"
         self.start_lng = f"{float(spot['lng']):.8f}"
         self.end_lat = f"{end_lat:.8f}"
@@ -1957,6 +1807,353 @@ class SpotDeleteScript(MacroElement):
         super().__init__()
         self._name = "SpotDeleteScript"
         self.map_name = fmap.get_name()
+
+
+class RouteModeScript(MacroElement):
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function() {
+            var map = {{ this.map_name }};
+            var entries = {{ this.marker_entries_js }};
+            var selectedIds = {{ this.selected_ids_json }};
+            var routeMode = {{ this.route_mode_json }};
+            var initialActive = {{ this.initial_active }};
+            var resultReady = {{ this.result_ready }};
+            var segmentDistances = {{ this.segment_distances_json }};
+            var routeError = {{ this.route_error_json }};
+            var routeLayer = {{ this.route_layer_js }};
+            var active = initialActive;
+            var savedPopups = new Map();
+            var badgeLayer = L.layerGroup().addTo(map);
+            var container = map.getContainer();
+            var root = document.createElement("div");
+            root.className = "pgis-route-ui";
+            root.innerHTML = [
+                '<button type="button" class="pgis-route-activate" title="경로 계산 모드">경로</button>',
+                '<section class="pgis-route-panel" aria-live="polite"></section>',
+                '<div class="pgis-route-loading"><div class="pgis-route-loading-spinner"></div><strong>경로 계산 중</strong></div>'
+            ].join("");
+            container.appendChild(root);
+            var activateButton = root.querySelector(".pgis-route-activate");
+            var panel = root.querySelector(".pgis-route-panel");
+            var loading = root.querySelector(".pgis-route-loading");
+
+            L.DomEvent.disableClickPropagation(root);
+            L.DomEvent.disableScrollPropagation(panel);
+
+            function streamlitValue(payload) {
+                payload.center = map.getCenter();
+                payload.zoom = map.getZoom();
+                if (window.__GLOBAL_DATA__) {
+                    window.__GLOBAL_DATA__.previous_data = payload;
+                }
+                if (window.Streamlit && window.Streamlit.setComponentValue) {
+                    window.Streamlit.setComponentValue(payload);
+                    return;
+                }
+                window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: "streamlit:setComponentValue",
+                    value: payload,
+                    dataType: "json"
+                }, "*");
+            }
+
+            function entryById(spotId) {
+                return entries.find(function(entry) {
+                    return Number(entry.id) === Number(spotId);
+                });
+            }
+
+            function escapeHtml(value) {
+                return String(value || "")
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;")
+                    .replaceAll('"', "&quot;")
+                    .replaceAll("'", "&#039;");
+            }
+
+            function formatDistance(meters) {
+                var value = Number(meters) || 0;
+                if (value >= 1000) {
+                    return (value / 1000).toFixed(value >= 10000 ? 0 : 1) + " km";
+                }
+                return Math.round(value) + " m";
+            }
+
+            function suspendPopups() {
+                map.closePopup();
+                entries.forEach(function(entry) {
+                    if (!savedPopups.has(entry.id)) {
+                        savedPopups.set(entry.id, entry.marker.getPopup());
+                    }
+                    entry.marker.unbindPopup();
+                });
+            }
+
+            function restorePopups() {
+                entries.forEach(function(entry) {
+                    var popup = savedPopups.get(entry.id);
+                    if (popup) {
+                        entry.marker.bindPopup(popup);
+                    }
+                });
+                savedPopups.clear();
+            }
+
+            function renderBadges() {
+                badgeLayer.clearLayers();
+                selectedIds.forEach(function(spotId, index) {
+                    var entry = entryById(spotId);
+                    if (!entry) {
+                        return;
+                    }
+                    L.marker([entry.lat, entry.lng], {
+                        interactive: false,
+                        icon: L.divIcon({
+                            className: "pgis-route-order-icon",
+                            html: '<span class="pgis-route-order">' + String(index + 1) + "</span>",
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        })
+                    }).addTo(badgeLayer);
+                });
+            }
+
+            function routeListHtml(withRemove) {
+                if (!selectedIds.length) {
+                    return '<p class="pgis-route-empty">지도에서 경유할 지점을 순서대로 선택하세요.</p>';
+                }
+                return '<ol class="pgis-route-list">' + selectedIds.map(function(spotId, index) {
+                    var entry = entryById(spotId);
+                    if (!entry) {
+                        return "";
+                    }
+                    var removeButton = withRemove
+                        ? '<button type="button" class="pgis-route-remove" data-spot-id="' + String(spotId) + '" title="선택 지점 삭제">×</button>'
+                        : "";
+                    return [
+                        '<li class="pgis-route-item">',
+                        '<span class="pgis-route-number">' + String(index + 1) + "</span>",
+                        '<span class="pgis-route-name" title="' + escapeHtml(entry.title) + '">' + escapeHtml(entry.title || "제목 없음") + "</span>",
+                        removeButton,
+                        "</li>"
+                    ].join("");
+                }).join("") + "</ol>";
+            }
+
+            function resultListHtml() {
+                if (!selectedIds.length) {
+                    return '<p class="pgis-route-empty">계산된 지점이 없습니다.</p>';
+                }
+                var html = '<div class="pgis-route-result-list">';
+                selectedIds.forEach(function(spotId, index) {
+                    var entry = entryById(spotId);
+                    if (!entry) {
+                        return;
+                    }
+                    html += [
+                        '<div class="pgis-route-result-item">',
+                        '<span class="pgis-route-number">' + String(index + 1) + "</span>",
+                        '<span class="pgis-route-name">' + escapeHtml(entry.title || "제목 없음") + "</span>",
+                        "</div>"
+                    ].join("");
+                    if (index < selectedIds.length - 1) {
+                        html += [
+                            '<div class="pgis-route-leg">',
+                            '<span class="pgis-route-arrow">↓</span>',
+                            '<span>' + formatDistance(segmentDistances[index]) + "</span>",
+                            "</div>"
+                        ].join("");
+                    }
+                });
+                return html + "</div>";
+            }
+
+            function renderSelectionPanel() {
+                panel.innerHTML = [
+                    '<div class="pgis-route-head"><strong>경로 계산 모드</strong><span>' + String(selectedIds.length) + "개 지점</span></div>",
+                    routeListHtml(true),
+                    '<button type="button" class="pgis-route-clear" ' + (selectedIds.length ? "" : "disabled") + '>선택 초기화</button>',
+                    '<div class="pgis-route-mode" role="group" aria-label="이동 방식">',
+                    '<button type="button" data-mode="차량" class="' + (routeMode === "차량" ? "is-active" : "") + '">차량</button>',
+                    '<button type="button" data-mode="도보" class="' + (routeMode === "도보" ? "is-active" : "") + '">도보</button>',
+                    "</div>",
+                    '<button type="button" class="pgis-route-calculate" ' + (selectedIds.length >= 2 ? "" : "disabled") + '>경로 계산</button>',
+                    '<button type="button" class="pgis-route-exit">나가기</button>'
+                ].join("");
+            }
+
+            function renderResultPanel() {
+                var status = routeError
+                    ? '<p class="pgis-route-error">' + escapeHtml(routeError) + "</p>"
+                    : resultListHtml();
+                panel.innerHTML = [
+                    '<div class="pgis-route-head"><strong>계산 경로</strong><span>' + escapeHtml(routeMode) + "</span></div>",
+                    status,
+                    '<button type="button" class="pgis-route-exit">나가기</button>'
+                ].join("");
+            }
+
+            function render() {
+                activateButton.hidden = active;
+                panel.classList.toggle("is-open", active);
+                window.__pgisRouteModeActive = active;
+                renderBadges();
+                if (!active) {
+                    return;
+                }
+                if (resultReady) {
+                    renderResultPanel();
+                } else {
+                    renderSelectionPanel();
+                }
+            }
+
+            function activate() {
+                active = true;
+                resultReady = false;
+                suspendPopups();
+                render();
+            }
+
+            function exit() {
+                var notifyServer = initialActive;
+                active = false;
+                selectedIds = [];
+                badgeLayer.clearLayers();
+                restorePopups();
+                if (routeLayer && map.hasLayer(routeLayer)) {
+                    map.removeLayer(routeLayer);
+                }
+                render();
+                if (notifyServer) {
+                    streamlitValue({
+                        _pgis_event: "exit_route_mode",
+                        _pgis_nonce: String(Date.now()) + "-" + String(Math.random())
+                    });
+                }
+            }
+
+            window.__pgisSelectRouteSpot = function(spotId) {
+                if (!active || resultReady || selectedIds.includes(Number(spotId))) {
+                    return;
+                }
+                selectedIds.push(Number(spotId));
+                render();
+            };
+
+            activateButton.addEventListener("click", activate);
+            panel.addEventListener("click", function(event) {
+                var target = event.target;
+                var removeButton = target.closest(".pgis-route-remove");
+                if (removeButton) {
+                    var removeId = Number(removeButton.getAttribute("data-spot-id"));
+                    selectedIds = selectedIds.filter(function(spotId) {
+                        return Number(spotId) !== removeId;
+                    });
+                    render();
+                    return;
+                }
+                if (target.closest(".pgis-route-clear")) {
+                    selectedIds = [];
+                    render();
+                    return;
+                }
+                var modeButton = target.closest(".pgis-route-mode button");
+                if (modeButton) {
+                    routeMode = modeButton.getAttribute("data-mode") || "차량";
+                    render();
+                    return;
+                }
+                if (target.closest(".pgis-route-calculate")) {
+                    if (selectedIds.length < 2) {
+                        return;
+                    }
+                    loading.classList.add("is-visible");
+                    streamlitValue({
+                        _pgis_event: "calculate_route",
+                        _pgis_nonce: String(Date.now()) + "-" + String(Math.random()),
+                        route_spot_ids: selectedIds.slice(),
+                        route_mode: routeMode
+                    });
+                    return;
+                }
+                if (target.closest(".pgis-route-exit")) {
+                    exit();
+                }
+            });
+
+            if (initialActive) {
+                suspendPopups();
+            }
+            render();
+            if (initialActive && resultReady) {
+                loading.classList.add("is-visible");
+                map.whenReady(function() {
+                    var hidden = false;
+                    function hideLoading() {
+                        if (hidden) {
+                            return;
+                        }
+                        hidden = true;
+                        loading.classList.remove("is-visible");
+                    }
+                    var tileLayer = null;
+                    map.eachLayer(function(layer) {
+                        if (!tileLayer && layer instanceof L.TileLayer) {
+                            tileLayer = layer;
+                        }
+                    });
+                    if (tileLayer) {
+                        tileLayer.once("load", hideLoading);
+                    }
+                    window.setTimeout(hideLoading, 900);
+                });
+            }
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(
+        self,
+        fmap: folium.Map,
+        marker_records: list[tuple[str, dict[str, Any]]],
+        route_layer_name: str | None,
+    ) -> None:
+        super().__init__()
+        self._name = "RouteModeScript"
+        self.map_name = fmap.get_name()
+        marker_entries = []
+        for marker_name, spot in marker_records:
+            marker_entries.append(
+                "{"
+                f"id:{int(spot.get('id', 0))},"
+                f"title:{json.dumps(str(spot.get('title') or ''), ensure_ascii=False)},"
+                f"lat:{float(spot['lat']):.8f},"
+                f"lng:{float(spot['lng']):.8f},"
+                f"marker:{marker_name}"
+                "}"
+            )
+        self.marker_entries_js = "[" + ",".join(marker_entries) + "]"
+        self.selected_ids_json = json.dumps(
+            [int(spot_id) for spot_id in st.session_state.get("route_spot_ids", [])]
+        )
+        self.route_mode_json = json.dumps(str(st.session_state.get("route_mode", "차량")), ensure_ascii=False)
+        self.initial_active = "true" if st.session_state.get("route_enabled", False) else "false"
+        self.result_ready = (
+            "true"
+            if st.session_state.get("route_result_signature") == route_signature()
+            else "false"
+        )
+        self.segment_distances_json = json.dumps(
+            [float(value) for value in st.session_state.get("route_segment_distances", [])]
+        )
+        self.route_error_json = json.dumps(str(st.session_state.get("route_error") or ""), ensure_ascii=False)
+        self.route_layer_js = route_layer_name or "null"
 
 
 class RightClickSelectScript(MacroElement):
@@ -2336,12 +2533,14 @@ def selected_route_spots(spots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def calculate_route(spots: list[dict[str, Any]]) -> tuple[list[tuple[float, float]], str | None]:
+def calculate_route(
+    spots: list[dict[str, Any]],
+) -> tuple[list[tuple[float, float]], list[float], str | None]:
     if not st.session_state.get("route_enabled", False):
-        return [], None
+        return [], [], None
     route_spots = selected_route_spots(spots)
     if len(route_spots) < 2:
-        return [], None
+        return [], [], None
 
     latitudes = [float(spot["lat"]) for spot in route_spots]
     longitudes = [float(spot["lng"]) for spot in route_spots]
@@ -2359,25 +2558,35 @@ def calculate_route(spots: list[dict[str, Any]]) -> tuple[list[tuple[float, floa
         graph = load_route_graph(bbox, network_type)
         nodes = ox.distance.nearest_nodes(graph, X=longitudes, Y=latitudes)
         all_coordinates: list[tuple[float, float]] = []
+        segment_distances: list[float] = []
         for origin, destination in zip(nodes, nodes[1:]):
             route = ox.routing.shortest_path(graph, origin, destination, weight="length")
             if not route:
-                return [], "선택한 지점 사이의 경로를 찾지 못했습니다."
+                return [], [], "선택한 지점 사이의 경로를 찾지 못했습니다."
+            segment_distance = 0.0
+            for start_node, end_node in zip(route, route[1:]):
+                edge_options = graph.get_edge_data(start_node, end_node) or {}
+                if edge_options:
+                    segment_distance += min(
+                        float(edge.get("length", 0.0))
+                        for edge in edge_options.values()
+                    )
+            segment_distances.append(segment_distance)
             segment = route_edge_coordinates(graph, list(route))
             if all_coordinates and segment and all_coordinates[-1] == segment[0]:
                 segment = segment[1:]
             all_coordinates.extend(segment)
-        return all_coordinates, None
+        return all_coordinates, segment_distances, None
     except Exception as exc:
-        return [], f"OSM 경로를 불러오지 못했습니다: {exc}"
+        return [], [], f"OSM 경로를 불러오지 못했습니다: {exc}"
 
 
-def add_route_layer(fmap: folium.Map, spots: list[dict[str, Any]]) -> None:
+def add_route_layer(fmap: folium.Map, spots: list[dict[str, Any]]) -> str | None:
     if not st.session_state.get("route_enabled", False):
-        return
+        return None
     route_spots = selected_route_spots(spots)
     if not route_spots:
-        return
+        return None
 
     route_coordinates: list[tuple[float, float]] = []
     route_error = ""
@@ -2390,13 +2599,14 @@ def add_route_layer(fmap: folium.Map, spots: list[dict[str, Any]]) -> None:
     if route_error:
         st.toast(route_error, icon="!")
     if route_coordinates:
+        route_layer = folium.FeatureGroup(name="route_result", control=False)
         folium.PolyLine(
             locations=route_coordinates,
             color=ui_color("color-surface"),
             weight=9,
             opacity=0.78,
             interactive=False,
-        ).add_to(fmap)
+        ).add_to(route_layer)
         folium.PolyLine(
             locations=route_coordinates,
             color=ui_color("color-accent"),
@@ -2404,19 +2614,10 @@ def add_route_layer(fmap: folium.Map, spots: list[dict[str, Any]]) -> None:
             opacity=0.96,
             tooltip=f"{st.session_state.get('route_mode', '차량')} 경로",
             interactive=False,
-        ).add_to(fmap)
-
-    for order, spot in enumerate(route_spots, start=1):
-        folium.Marker(
-            location=(float(spot["lat"]), float(spot["lng"])),
-            icon=folium.DivIcon(
-                class_name="pgis-route-order-icon",
-                html=f'<span class="pgis-route-order">{order}</span>',
-                icon_size=(24, 24),
-                icon_anchor=(12, 12),
-            ),
-            interactive=False,
-        ).add_to(fmap)
+        ).add_to(route_layer)
+        route_layer.add_to(fmap)
+        return route_layer.get_name()
+    return None
 
 
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
@@ -2456,7 +2657,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         max_zoom=19,
         max_native_zoom=19,
     ).add_to(fmap)
-    add_route_layer(fmap, spots)
+    route_layer_name = add_route_layer(fmap, spots)
     fmap.get_root().header.add_child(
         folium.Element(
             f"""
@@ -2511,6 +2712,223 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 box-shadow: 0 3px 10px {ui_color("color-shadow")};
                 font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                 pointer-events: none;
+            }}
+            .pgis-route-ui {{
+                position: absolute;
+                inset: 0;
+                z-index: 1000;
+                pointer-events: none;
+                font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }}
+            .pgis-route-activate {{
+                position: absolute;
+                right: 14px;
+                bottom: 24px;
+                min-width: 82px;
+                min-height: 40px;
+                padding: 0 14px;
+                border: 1px solid {ui_color("color-accent-strong")};
+                border-radius: 8px;
+                background: {ui_color("color-accent")};
+                color: #fff;
+                box-shadow: 0 12px 30px {ui_color("color-shadow")};
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 850;
+                pointer-events: auto;
+            }}
+            .pgis-route-activate[hidden] {{
+                display: none;
+            }}
+            .pgis-route-panel {{
+                position: absolute;
+                top: 68px;
+                right: 14px;
+                display: none;
+                width: min(300px, calc(100vw - 28px));
+                max-height: calc(100vh - 82px);
+                padding: 12px;
+                overflow-y: auto;
+                border: 1px solid {popup_border};
+                border-radius: 8px;
+                background: {popup_surface};
+                color: {popup_text};
+                box-shadow: {popup_shadow};
+                pointer-events: auto;
+            }}
+            .pgis-route-panel.is-open {{
+                display: block;
+                animation: pgis-route-panel-in 180ms cubic-bezier(.2, .8, .2, 1);
+            }}
+            .pgis-route-head {{
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 10px;
+                padding-bottom: 9px;
+                border-bottom: 1px solid {popup_border};
+            }}
+            .pgis-route-head strong {{
+                font-size: 14px;
+                font-weight: 900;
+            }}
+            .pgis-route-head span {{
+                color: {ui_color("color-muted")};
+                font-size: 11px;
+                font-weight: 800;
+            }}
+            .pgis-route-list {{
+                margin: 5px 0 8px;
+                padding: 0;
+                list-style: none;
+            }}
+            .pgis-route-item,
+            .pgis-route-result-item {{
+                display: grid;
+                grid-template-columns: 24px minmax(0, 1fr) 26px;
+                gap: 8px;
+                align-items: center;
+                min-height: 40px;
+                border-bottom: 1px solid {popup_border};
+            }}
+            .pgis-route-result-item {{
+                grid-template-columns: 24px minmax(0, 1fr);
+            }}
+            .pgis-route-number {{
+                display: grid;
+                place-items: center;
+                width: 22px;
+                height: 22px;
+                border-radius: 50%;
+                background: {ui_color("color-accent")};
+                color: #fff;
+                font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            }}
+            .pgis-route-name {{
+                overflow: hidden;
+                color: {popup_text};
+                font-size: 12px;
+                font-weight: 800;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }}
+            .pgis-route-remove {{
+                width: 24px;
+                height: 24px;
+                padding: 0;
+                border: 1px solid {popup_border};
+                border-radius: 50%;
+                background: {ui_color("color-surface-soft")};
+                color: {ui_color("color-muted")};
+                cursor: pointer;
+                font-size: 16px;
+                line-height: 1;
+            }}
+            .pgis-route-clear,
+            .pgis-route-calculate,
+            .pgis-route-exit {{
+                width: 100%;
+                min-height: 38px;
+                margin-top: 8px;
+                border: 1px solid {popup_border};
+                border-radius: 6px;
+                background: {ui_color("color-surface")};
+                color: {popup_text};
+                cursor: pointer;
+                font-size: 12px;
+                font-weight: 850;
+            }}
+            .pgis-route-calculate {{
+                border-color: {ui_color("color-accent-strong")};
+                background: {ui_color("color-accent")};
+                color: #fff;
+            }}
+            .pgis-route-clear:disabled,
+            .pgis-route-calculate:disabled {{
+                cursor: default;
+                opacity: 0.45;
+            }}
+            .pgis-route-mode {{
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 4px;
+                margin-top: 8px;
+                padding: 3px;
+                border: 1px solid {popup_border};
+                border-radius: 6px;
+                background: {ui_color("color-surface-soft")};
+            }}
+            .pgis-route-mode button {{
+                min-height: 32px;
+                border: 0;
+                border-radius: 4px;
+                background: transparent;
+                color: {ui_color("color-muted")};
+                cursor: pointer;
+                font-size: 12px;
+                font-weight: 850;
+            }}
+            .pgis-route-mode button.is-active {{
+                background: {ui_color("color-surface")};
+                color: {ui_color("color-accent")};
+                box-shadow: 0 1px 4px {ui_color("color-shadow-soft")};
+            }}
+            .pgis-route-empty,
+            .pgis-route-error {{
+                margin: 10px 0 4px;
+                color: {ui_color("color-muted")};
+                font-size: 12px;
+                line-height: 1.45;
+            }}
+            .pgis-route-error {{
+                color: #ef4444;
+            }}
+            .pgis-route-result-list {{
+                margin-top: 5px;
+            }}
+            .pgis-route-leg {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-height: 34px;
+                padding-left: 7px;
+                color: {ui_color("color-muted")};
+                font-size: 11px;
+                font-weight: 800;
+            }}
+            .pgis-route-arrow {{
+                color: {ui_color("color-accent")};
+                font-size: 16px;
+                font-weight: 900;
+            }}
+            .pgis-route-loading {{
+                position: absolute;
+                inset: 0;
+                display: none;
+                place-items: center;
+                align-content: center;
+                gap: 12px;
+                background: {ui_color("color-canvas")};
+                color: {popup_text};
+                pointer-events: auto;
+            }}
+            .pgis-route-loading.is-visible {{
+                display: grid;
+            }}
+            .pgis-route-loading-spinner {{
+                width: 28px;
+                height: 28px;
+                border: 3px solid {popup_border};
+                border-top-color: {ui_color("color-accent")};
+                border-radius: 50%;
+                animation: pgis-route-spin 700ms linear infinite;
+            }}
+            @keyframes pgis-route-panel-in {{
+                from {{ transform: translateX(10px); opacity: 0; }}
+                to {{ transform: translateX(0); opacity: 1; }}
+            }}
+            @keyframes pgis-route-spin {{
+                to {{ transform: rotate(360deg); }}
             }}
             .leaflet-popup-content-wrapper,
             .leaflet-popup-tip {{
@@ -2567,12 +2985,10 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     RightClickSelectScript(fmap).add_to(fmap)
     SpotDeleteScript(fmap).add_to(fmap)
 
+    marker_records: list[tuple[str, dict[str, Any]]] = []
     for spot in spots:
         color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
         active = spot["id"] == st.session_state.active_spot_id
-        popup = None
-        if not st.session_state.get("route_enabled", False):
-            popup = folium.Popup(record_popup_html(spot), max_width=320)
         marker = folium.CircleMarker(
             location=(spot["lat"], spot["lng"]),
             radius=6 if active else 4,
@@ -2582,11 +2998,13 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             fill_color=color,
             fill_opacity=0.92 if active else 0.72,
             tooltip=str(spot.get("title") or ""),
-            popup=popup,
+            popup=folium.Popup(record_popup_html(spot), max_width=320),
             bubbling_mouse_events=False,
         ).add_to(fmap)
+        marker_records.append((marker.get_name(), spot))
         DirectionClickScript(fmap, marker.get_name(), spot).add_to(fmap)
 
+    RouteModeScript(fmap, marker_records, route_layer_name).add_to(fmap)
     return fmap
 
 def spot_csv(spots: list[dict[str, Any]]) -> bytes:
@@ -2677,89 +3095,6 @@ def render_options_menu() -> None:
         st.markdown(f'<div class="options-panel-state {panel_state}"></div>', unsafe_allow_html=True)
         st.markdown('<p class="options-panel-title">옵션</p>', unsafe_allow_html=True)
         st.checkbox("다크모드", key="dark_mode")
-
-
-def render_route_controls(spots: list[dict[str, Any]]) -> None:
-    if not st.session_state.get("route_enabled", False):
-        st.button(
-            "경로",
-            key="route_activate_button",
-            use_container_width=False,
-            on_click=activate_route_mode,
-        )
-        return
-
-    route_spots = selected_route_spots(spots)
-    with st.container(key="route_panel"):
-        st.markdown(
-            f"""
-            <div class="route-panel-head">
-                <p class="route-panel-title">경로 계산 모드</p>
-                <span class="route-panel-count">{len(route_spots)}개 지점</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        select_tab, calculate_tab = st.tabs(["지점 선택", "경로 계산"])
-        with select_tab:
-            if route_spots:
-                route_items = "".join(
-                    (
-                        '<li class="route-list-item">'
-                        f'<span class="route-list-order">{order}</span>'
-                        f'<span class="route-list-title" title="{escape(spot.get("title"))}">'
-                        f'{escape(spot.get("title") or "제목 없음")}</span>'
-                        "</li>"
-                    )
-                    for order, spot in enumerate(route_spots, start=1)
-                )
-                st.markdown(f'<ol class="route-list">{route_items}</ol>', unsafe_allow_html=True)
-            else:
-                st.markdown(
-                    '<p class="route-list-empty">지도에서 경유할 지점을 순서대로 선택하세요.</p>',
-                    unsafe_allow_html=True,
-                )
-            st.button(
-                "선택 초기화",
-                key="clear_route_selection",
-                use_container_width=True,
-                disabled=not route_spots,
-                on_click=clear_route_selection,
-            )
-        with calculate_tab:
-            st.radio(
-                "이동 방식",
-                ["차량", "도보"],
-                horizontal=True,
-                key="route_mode",
-                on_change=invalidate_route_result,
-            )
-            calculate_disabled = len(route_spots) < 2
-            if st.button(
-                "경로 계산",
-                key="calculate_route_button",
-                type="primary",
-                use_container_width=True,
-                disabled=calculate_disabled,
-            ):
-                with st.spinner("경로 계산 중..."):
-                    coordinates, route_error = calculate_route(spots)
-                st.session_state.route_coordinates = coordinates
-                st.session_state.route_error = route_error or ""
-                st.session_state.route_result_signature = route_signature()
-            if calculate_disabled:
-                st.caption("지점을 2개 이상 선택하세요.")
-            elif st.session_state.get("route_result_signature") == route_signature():
-                if st.session_state.get("route_error"):
-                    st.error(str(st.session_state.route_error))
-                elif st.session_state.get("route_coordinates"):
-                    st.success("경로 계산 완료")
-        st.button(
-            "경로 모드 나가기",
-            key="exit_route_mode",
-            use_container_width=True,
-            on_click=exit_route_mode,
-        )
 
 
 def add_spot(
@@ -3195,24 +3530,44 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
     if not map_data:
         return
     event_type = map_data.get("_pgis_event")
-    if event_type == "route_spot_click":
-        if not st.session_state.get("route_enabled", False):
-            return
+    if event_type == "calculate_route":
         nonce = map_data.get("_pgis_nonce")
         if nonce and nonce == st.session_state.get("last_route_spot_nonce"):
             return
         st.session_state.last_route_spot_nonce = nonce
         store_map_view(map_data)
-        try:
-            spot_id = int(map_data.get("spot_id"))
-        except (TypeError, ValueError):
+        available_ids = {int(spot["id"]) for spot in available_spots(st.session_state.spots)}
+        route_spot_ids = []
+        for value in map_data.get("route_spot_ids") or []:
+            try:
+                spot_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if spot_id in available_ids and spot_id not in route_spot_ids:
+                route_spot_ids.append(spot_id)
+        if len(route_spot_ids) < 2:
+            st.toast("경로 계산에는 지점이 2개 이상 필요합니다.", icon="!")
             return
-        route_spot_ids = list(st.session_state.get("route_spot_ids", []))
-        if spot_id not in route_spot_ids:
-            route_spot_ids.append(spot_id)
-            st.session_state.route_spot_ids = route_spot_ids
-            invalidate_route_result()
-            st.rerun()
+        route_mode = str(map_data.get("route_mode") or "차량")
+        st.session_state.route_enabled = True
+        st.session_state.route_spot_ids = route_spot_ids
+        st.session_state.route_mode = route_mode if route_mode in {"차량", "도보"} else "차량"
+        invalidate_route_result()
+        coordinates, segment_distances, route_error = calculate_route(st.session_state.spots)
+        st.session_state.route_coordinates = coordinates
+        st.session_state.route_segment_distances = segment_distances
+        st.session_state.route_error = route_error or ""
+        st.session_state.route_result_signature = route_signature()
+        st.rerun()
+    if event_type == "exit_route_mode":
+        nonce = map_data.get("_pgis_nonce")
+        if nonce and nonce == st.session_state.get("last_route_spot_nonce"):
+            return
+        st.session_state.last_route_spot_nonce = nonce
+        store_map_view(map_data)
+        exit_route_mode()
+        st.rerun()
+    if event_type in {"calculate_route", "exit_route_mode"}:
         return
     if event_type == "record_panel_out_of_bounds":
         nonce = map_data.get("_pgis_nonce")
@@ -3289,7 +3644,6 @@ def main() -> None:
         st.session_state.delete_feedback = ""
     spots = available_spots(st.session_state.spots)
 
-    render_route_controls(spots)
     render_map(spots)
     inject_layout_vars()
     render_record_panel()
