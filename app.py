@@ -346,9 +346,13 @@ if not _inside_streamlit() and os.environ.get("PGIS_STREAMLIT_BOOTSTRAPPED") != 
 
 
 import folium
+import osmnx as ox
 from branca.element import MacroElement, Template
 from PIL import Image
 from streamlit_folium import st_folium
+
+
+ox.settings.use_cache = False
 
 
 st.set_page_config(
@@ -1175,6 +1179,9 @@ def ensure_state() -> None:
         "delete_feedback": "",
         "options_panel_open": False,
         "dark_mode": False,
+        "route_mode": "차량",
+        "route_spot_ids": [],
+        "last_route_spot_nonce": None,
         "record_direction": 45,
         "record_date_text": now.strftime("%Y-%m-%d"),
         "record_time_text": now.strftime("%H:%M"),
@@ -1193,6 +1200,12 @@ def ensure_state() -> None:
         for index, spot in enumerate(st.session_state.get("spots", []))
     ]
     visible_spots = available_spots(st.session_state.spots)
+    visible_spot_ids = {int(spot["id"]) for spot in visible_spots}
+    st.session_state.route_spot_ids = [
+        int(spot_id)
+        for spot_id in st.session_state.get("route_spot_ids", [])
+        if int(spot_id) in visible_spot_ids
+    ]
     if not any(spot["id"] == st.session_state.active_spot_id for spot in visible_spots):
         st.session_state.active_spot_id = visible_spots[0]["id"] if visible_spots else None
 
@@ -1219,6 +1232,10 @@ def close_record_panel() -> None:
 
 def toggle_options_panel() -> None:
     st.session_state.options_panel_open = not bool(st.session_state.get("options_panel_open", False))
+
+
+def clear_route_selection() -> None:
+    st.session_state.route_spot_ids = []
 
 
 def toggle_record_location_picker() -> None:
@@ -1633,6 +1650,24 @@ class DirectionClickScript(MacroElement):
             var color = "{{ this.color }}";
             var surface = "{{ this.surface }}";
             var text = "{{ this.text }}";
+            var spotId = {{ this.spot_id }};
+            function streamlitValue(payload) {
+                payload.center = map.getCenter();
+                payload.zoom = map.getZoom();
+                if (window.__GLOBAL_DATA__) {
+                    window.__GLOBAL_DATA__.previous_data = payload;
+                }
+                if (window.Streamlit && window.Streamlit.setComponentValue) {
+                    window.Streamlit.setComponentValue(payload);
+                    return;
+                }
+                window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: "streamlit:setComponentValue",
+                    value: payload,
+                    dataType: "json"
+                }, "*");
+            }
             function clearDirectionLayer() {
                 if (window.__pgisDirectionLayer) {
                     map.removeLayer(window.__pgisDirectionLayer);
@@ -1681,6 +1716,11 @@ class DirectionClickScript(MacroElement):
                         interactive: false
                     })
                 ]).addTo(map);
+                streamlitValue({
+                    _pgis_event: "route_spot_click",
+                    _pgis_nonce: String(Date.now()) + "-" + String(Math.random()),
+                    spot_id: spotId
+                });
             });
             marker.on("popupclose", clearDirectionLayer);
         })();
@@ -1694,6 +1734,7 @@ class DirectionClickScript(MacroElement):
         end_lat, end_lng = destination_point(spot["lat"], spot["lng"], spot_drct(spot))
         self.map_name = fmap.get_name()
         self.marker_name = marker_name
+        self.spot_id = int(spot.get("id", 0))
         self.start_lat = f"{float(spot['lat']):.8f}"
         self.start_lng = f"{float(spot['lng']):.8f}"
         self.end_lat = f"{end_lat:.8f}"
@@ -2093,6 +2134,122 @@ class RightClickSelectScript(MacroElement):
         self.panel_open = "true" if st.session_state.get("right_drawer_open", False) else "false"
 
 
+@st.cache_resource(show_spinner=False, ttl=3600, max_entries=8)
+def load_route_graph(
+    bbox: tuple[float, float, float, float],
+    network_type: str,
+) -> Any:
+    return ox.graph.graph_from_bbox(bbox, network_type=network_type, simplify=True)
+
+
+def route_edge_coordinates(graph: Any, route: list[int]) -> list[tuple[float, float]]:
+    coordinates: list[tuple[float, float]] = []
+    for start_node, end_node in zip(route, route[1:]):
+        edge_options = graph.get_edge_data(start_node, end_node) or {}
+        if not edge_options:
+            continue
+        edge = min(edge_options.values(), key=lambda item: float(item.get("length", math.inf)))
+        geometry = edge.get("geometry")
+        if geometry is None:
+            edge_coordinates = [
+                (float(graph.nodes[start_node]["y"]), float(graph.nodes[start_node]["x"])),
+                (float(graph.nodes[end_node]["y"]), float(graph.nodes[end_node]["x"])),
+            ]
+        else:
+            edge_coordinates = [(float(y), float(x)) for x, y in geometry.coords]
+            start_coordinate = (
+                float(graph.nodes[start_node]["y"]),
+                float(graph.nodes[start_node]["x"]),
+            )
+            if math.dist(edge_coordinates[-1], start_coordinate) < math.dist(edge_coordinates[0], start_coordinate):
+                edge_coordinates.reverse()
+        if coordinates and edge_coordinates and coordinates[-1] == edge_coordinates[0]:
+            edge_coordinates = edge_coordinates[1:]
+        coordinates.extend(edge_coordinates)
+    return coordinates
+
+
+def selected_route_spots(spots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    spots_by_id = {int(spot["id"]): spot for spot in spots}
+    return [
+        spots_by_id[int(spot_id)]
+        for spot_id in st.session_state.get("route_spot_ids", [])
+        if int(spot_id) in spots_by_id
+    ]
+
+
+def calculate_route(spots: list[dict[str, Any]]) -> tuple[list[tuple[float, float]], str | None]:
+    route_spots = selected_route_spots(spots)
+    if len(route_spots) < 2:
+        return [], None
+
+    latitudes = [float(spot["lat"]) for spot in route_spots]
+    longitudes = [float(spot["lng"]) for spot in route_spots]
+    lat_padding = max(0.01, (max(latitudes) - min(latitudes)) * 0.15)
+    lng_padding = max(0.01, (max(longitudes) - min(longitudes)) * 0.15)
+    bbox = (
+        round(min(longitudes) - lng_padding, 5),
+        round(min(latitudes) - lat_padding, 5),
+        round(max(longitudes) + lng_padding, 5),
+        round(max(latitudes) + lat_padding, 5),
+    )
+    network_type = "drive" if st.session_state.get("route_mode") == "차량" else "walk"
+
+    try:
+        graph = load_route_graph(bbox, network_type)
+        nodes = ox.distance.nearest_nodes(graph, X=longitudes, Y=latitudes)
+        all_coordinates: list[tuple[float, float]] = []
+        for origin, destination in zip(nodes, nodes[1:]):
+            route = ox.routing.shortest_path(graph, origin, destination, weight="length")
+            if not route:
+                return [], "선택한 지점 사이의 경로를 찾지 못했습니다."
+            segment = route_edge_coordinates(graph, list(route))
+            if all_coordinates and segment and all_coordinates[-1] == segment[0]:
+                segment = segment[1:]
+            all_coordinates.extend(segment)
+        return all_coordinates, None
+    except Exception as exc:
+        return [], f"OSM 경로를 불러오지 못했습니다: {exc}"
+
+
+def add_route_layer(fmap: folium.Map, spots: list[dict[str, Any]]) -> None:
+    route_spots = selected_route_spots(spots)
+    if not route_spots:
+        return
+
+    route_coordinates, route_error = calculate_route(spots)
+    if route_error:
+        st.toast(route_error, icon="!")
+    if route_coordinates:
+        folium.PolyLine(
+            locations=route_coordinates,
+            color=ui_color("color-surface"),
+            weight=9,
+            opacity=0.78,
+            interactive=False,
+        ).add_to(fmap)
+        folium.PolyLine(
+            locations=route_coordinates,
+            color=ui_color("color-accent"),
+            weight=5,
+            opacity=0.96,
+            tooltip=f"{st.session_state.get('route_mode', '차량')} 경로",
+            interactive=False,
+        ).add_to(fmap)
+
+    for order, spot in enumerate(route_spots, start=1):
+        folium.Marker(
+            location=(float(spot["lat"]), float(spot["lng"])),
+            icon=folium.DivIcon(
+                class_name="pgis-route-order-icon",
+                html=f'<span class="pgis-route-order">{order}</span>',
+                icon_size=(24, 24),
+                icon_anchor=(12, 12),
+            ),
+            interactive=False,
+        ).add_to(fmap)
+
+
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     center = st.session_state.get("map_center") or selected_point_value() or SEOUL_CENTER
     active_spot = None
@@ -2130,6 +2287,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         max_zoom=19,
         max_native_zoom=19,
     ).add_to(fmap)
+    add_route_layer(fmap, spots)
     fmap.get_root().header.add_child(
         folium.Element(
             f"""
@@ -2166,6 +2324,24 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             }}
             .leaflet-tile-pane img {{
                 filter: saturate(1.22) contrast(1.04);
+            }}
+            .pgis-route-order-icon {{
+                background: transparent !important;
+                border: 0 !important;
+                pointer-events: none !important;
+            }}
+            .pgis-route-order {{
+                display: grid;
+                place-items: center;
+                width: 24px;
+                height: 24px;
+                border: 2px solid {popup_surface};
+                border-radius: 50%;
+                background: {ui_color("color-accent")};
+                color: #fff;
+                box-shadow: 0 3px 10px {ui_color("color-shadow")};
+                font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                pointer-events: none;
             }}
             .leaflet-popup-content-wrapper,
             .leaflet-popup-tip {{
@@ -2329,6 +2505,16 @@ def render_options_menu() -> None:
         st.markdown(f'<div class="options-panel-state {panel_state}"></div>', unsafe_allow_html=True)
         st.markdown('<p class="options-panel-title">옵션</p>', unsafe_allow_html=True)
         st.checkbox("다크모드", key="dark_mode")
+        st.radio("이동 방식", ["차량", "도보"], horizontal=True, key="route_mode")
+        selected_count = len(st.session_state.get("route_spot_ids", []))
+        st.caption(f"경로 지점 {selected_count}")
+        st.button(
+            "경로 초기화",
+            key="clear_route_selection",
+            use_container_width=True,
+            disabled=selected_count == 0,
+            on_click=clear_route_selection,
+        )
 
 
 def add_spot(
@@ -2764,6 +2950,22 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
     if not map_data:
         return
     event_type = map_data.get("_pgis_event")
+    if event_type == "route_spot_click":
+        nonce = map_data.get("_pgis_nonce")
+        if nonce and nonce == st.session_state.get("last_route_spot_nonce"):
+            return
+        st.session_state.last_route_spot_nonce = nonce
+        store_map_view(map_data)
+        try:
+            spot_id = int(map_data.get("spot_id"))
+        except (TypeError, ValueError):
+            return
+        route_spot_ids = list(st.session_state.get("route_spot_ids", []))
+        if spot_id not in route_spot_ids:
+            route_spot_ids.append(spot_id)
+            st.session_state.route_spot_ids = route_spot_ids
+            st.rerun()
+        return
     if event_type == "record_panel_out_of_bounds":
         nonce = map_data.get("_pgis_nonce")
         if nonce and nonce == st.session_state.get("last_panel_close_nonce"):
@@ -2817,7 +3019,11 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
 
 def render_map(spots: list[dict[str, Any]]) -> None:
     st.markdown('<div class="map-wrap">', unsafe_allow_html=True)
-    fmap = build_map(spots)
+    if len(selected_route_spots(spots)) >= 2:
+        with st.spinner("경로 계산 중..."):
+            fmap = build_map(spots)
+    else:
+        fmap = build_map(spots)
     map_data = st_folium(
         fmap,
         height=1200,
