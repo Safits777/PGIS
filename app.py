@@ -1036,6 +1036,15 @@ def clear_record_selection() -> None:
     st.session_state.selected_point = None
 
 
+def close_record_panel() -> None:
+    clear_record_selection()
+
+
+def toggle_record_location_picker() -> None:
+    st.session_state.picking_location = not st.session_state.picking_location
+    st.session_state.right_drawer_open = True
+
+
 def escape(value: Any) -> str:
     return html.escape(str(value or ""), quote=True)
 
@@ -2095,10 +2104,12 @@ def render_form() -> None:
         """,
         unsafe_allow_html=True,
     )
-    if st.button("선택 취소" if st.session_state.picking_location else "위치 선택", key="pick_location_button", use_container_width=True):
-        st.session_state.picking_location = not st.session_state.picking_location
-        st.session_state.right_drawer_open = True
-        st.rerun()
+    st.button(
+        "선택 취소" if st.session_state.picking_location else "위치 선택",
+        key="pick_location_button",
+        use_container_width=True,
+        on_click=toggle_record_location_picker,
+    )
 
     with st.form("spot_form", clear_on_submit=True):
         title = st.text_input("스팟명", placeholder="예: 유리창 노을 반사 포인트")
@@ -2179,10 +2190,12 @@ def render_record_form() -> None:
             unsafe_allow_html=True,
         )
     with close_col:
-        close_clicked = st.button("닫기", key="close_record_panel", use_container_width=False)
-    if close_clicked:
-        clear_record_selection()
-        st.rerun()
+        st.button(
+            "닫기",
+            key="close_record_panel",
+            use_container_width=False,
+            on_click=close_record_panel,
+        )
 
     with st.form("record_form", clear_on_submit=False):
         dial_col, main_col = st.columns([0.42, 1.0])
@@ -2279,6 +2292,14 @@ def render_record_form() -> None:
                 clear_record_selection()
                 st.success("마커를 추가했습니다.")
                 st.rerun()
+
+
+@st.fragment
+def render_record_panel() -> None:
+    if not st.session_state.get("right_drawer_open", False):
+        return
+    with st.container(key="right_drawer_panel"):
+        render_record_form()
 
 
 def render_active_detail() -> None:
@@ -2478,9 +2499,7 @@ def main() -> None:
 
     render_map(spots)
     inject_layout_vars()
-    if st.session_state.right_drawer_open:
-        with st.container(key="right_drawer_panel"):
-            render_record_form()
+    render_record_panel()
 
 
 if __name__ == "__main__":
