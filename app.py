@@ -10,7 +10,7 @@ import math
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -160,7 +160,8 @@ SELECT
     lens,
     comp,
     password,
-    available AS "Available"
+    available AS "Available",
+    created_at
 FROM spots
 ORDER BY id;
 """
@@ -1287,6 +1288,7 @@ def ensure_state() -> None:
         "last_delete_spot_nonce": None,
         "last_spot_select_nonce": None,
         "delete_feedback": "",
+        "create_feedback": "",
         "options_panel_open": False,
         "dark_mode": False,
         "route_enabled": False,
@@ -1560,7 +1562,26 @@ def normalize_spot(spot: dict[str, Any], fallback_id: int | None = None) -> dict
         "lens": str(spot.get("lens") or spot.get("camera") or "").strip(),
         "comp": comp,
         "password": spot_password(spot),
+        "created_at": str(spot.get("created_at") or "").strip(),
     }
+
+
+def is_recent_spot(spot: dict[str, Any], hours: int = 6) -> bool:
+    raw_created_at = spot.get("created_at")
+    if not raw_created_at:
+        return False
+    try:
+        if isinstance(raw_created_at, datetime):
+            created_at = raw_created_at
+        else:
+            created_at = datetime.fromisoformat(str(raw_created_at).strip().replace("Z", "+00:00"))
+        if created_at.tzinfo is None:
+            created_at = created_at.astimezone()
+        now = datetime.now().astimezone()
+        age = now - created_at.astimezone(now.tzinfo)
+        return timedelta(0) <= age <= timedelta(hours=hours)
+    except (TypeError, ValueError):
+        return False
 
 
 def render_direction_dial() -> int:
@@ -1714,7 +1735,7 @@ def record_popup_html(spot: dict[str, Any]) -> str:
     return f"""
     <div style="position:relative;width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};padding-top:16px;">
         <button type="button" class="pgis-popup-delete" data-spot-id="{spot_id}" title="삭제"
-            style="position:absolute;top:-1px;right:32px;width:12px;height:12px;box-sizing:border-box;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;margin:0;padding:0;cursor:pointer;font-size:0;line-height:0;transform:none;"></button>
+            style="position:absolute;top:-1px;right:28px;width:12px;height:12px;box-sizing:border-box;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;margin:0;padding:0;cursor:pointer;font-size:0;line-height:0;transform:none;"></button>
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
             <div style="font-size:12px;color:{muted};font-weight:800;text-transform:uppercase;">SPOT NODE</div>
             <div style="font-size:16px;font-weight:900;line-height:1.25;color:{text};">{escape(spot.get("title"))}</div>
@@ -3115,6 +3136,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             }}
             .pgis-popup-delete {{
                 top: -1px !important;
+                right: 28px !important;
                 width: 12px !important;
                 height: 12px !important;
                 box-sizing: border-box !important;
@@ -3122,6 +3144,18 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 padding: 0 !important;
                 transform: none !important;
                 vertical-align: top !important;
+            }}
+            .pgis-recent-halo {{
+                filter:
+                    drop-shadow(0 0 2px rgba(255, 255, 255, 1))
+                    drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))
+                    drop-shadow(0 0 10px rgba(255, 255, 255, 0.68));
+                animation: pgis-recent-halo-pulse 1.8s ease-in-out infinite;
+                pointer-events: none;
+            }}
+            @keyframes pgis-recent-halo-pulse {{
+                0%, 100% {{ opacity: 0.68; }}
+                50% {{ opacity: 1; }}
             }}
             .leaflet-popup-close-button:hover {{
                 background: #dc2626 !important;
@@ -3152,15 +3186,25 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     marker_records: list[tuple[str, dict[str, Any]]] = []
     for spot in spots:
         color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
-        active = spot["id"] == st.session_state.active_spot_id
+        if is_recent_spot(spot):
+            folium.CircleMarker(
+                location=(spot["lat"], spot["lng"]),
+                radius=8,
+                color="#ffffff",
+                weight=1.5,
+                opacity=0.96,
+                fill=False,
+                interactive=False,
+                class_name="pgis-recent-halo",
+            ).add_to(fmap)
         marker = folium.CircleMarker(
             location=(spot["lat"], spot["lng"]),
-            radius=6 if active else 4,
+            radius=4,
             color=color,
-            weight=2 if active else 1,
+            weight=1,
             fill=True,
             fill_color=color,
-            fill_opacity=0.92 if active else 0.72,
+            fill_opacity=0.72,
             tooltip=str(spot.get("title") or ""),
             popup=folium.Popup(
                 record_popup_html(spot),
@@ -3304,6 +3348,7 @@ def add_spot(
         "time": time_value.strip(),
         "password": spot_password({"password": password}),
         "comp": comp or {"F값": "", "ISO값": "", "셔터스피드": "", "화각": ""},
+        "created_at": datetime.now().astimezone().isoformat(),
     }
     st.session_state.spots.append(spot)
     st.session_state.active_spot_id = next_id
@@ -3311,7 +3356,10 @@ def add_spot(
     st.session_state.map_center = (spot["lat"], spot["lng"])
     st.session_state.form_lat = spot["lat"]
     st.session_state.form_lng = spot["lng"]
-    return persist_spots()
+    saved = persist_spots()
+    if saved:
+        st.session_state.create_feedback = "created"
+    return saved
 
 
 def hide_spot(spot_id: int) -> bool:
@@ -3428,7 +3476,6 @@ def render_form() -> None:
                 password=password,
             )
             if saved:
-                st.success("스팟이 지도에 추가됐습니다.")
                 st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -3557,7 +3604,6 @@ def render_record_form() -> None:
             )
             if saved:
                 clear_record_selection()
-                st.success("마커를 추가했습니다.")
                 st.rerun()
 
 
@@ -3835,6 +3881,9 @@ def main() -> None:
     if st.session_state.get("delete_feedback") == "deleted":
         st.toast("지점을 삭제했습니다.", icon="✅")
         st.session_state.delete_feedback = ""
+    if st.session_state.get("create_feedback") == "created":
+        st.toast("지점을 생성했습니다.", icon="✨")
+        st.session_state.create_feedback = ""
     spots = available_spots(st.session_state.spots)
 
     render_map(spots)
