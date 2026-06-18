@@ -585,7 +585,7 @@ def inject_css() -> None:
 
         .st-key-record_long_exposure [role="checkbox"],
         .st-key-record_long_exposure [role="switch"],
-        .st-key-record_long_exposure input[type="checkbox"] + div,
+        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])),
         .st-key-record_long_exposure [data-testid="stToggleSwitch"] {{
             background: var(--record-toggle-off) !important;
             border-color: var(--record-toggle-off) !important;
@@ -597,16 +597,24 @@ def inject_css() -> None:
                 transform 180ms ease !important;
         }}
 
+        .st-key-record_long_exposure input[type="checkbox"] {{
+            position: absolute !important;
+            width: 0 !important;
+            height: 0 !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }}
+
         .st-key-record_long_exposure [role="checkbox"][aria-checked="false"],
         .st-key-record_long_exposure [role="switch"][aria-checked="false"],
-        .st-key-record_long_exposure input[type="checkbox"]:not(:checked) + div {{
+        .st-key-record_long_exposure input[type="checkbox"]:not(:checked) + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) {{
             background: var(--record-toggle-off) !important;
             border-color: var(--record-toggle-off) !important;
         }}
 
         .st-key-record_long_exposure [role="checkbox"][aria-checked="true"],
         .st-key-record_long_exposure [role="switch"][aria-checked="true"],
-        .st-key-record_long_exposure input[type="checkbox"]:checked + div {{
+        .st-key-record_long_exposure input[type="checkbox"]:checked + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) {{
             background: var(--record-danger) !important;
             border-color: var(--record-danger-strong) !important;
             box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.22), 0 1px 4px var(--color-shadow-soft) !important;
@@ -614,8 +622,8 @@ def inject_css() -> None:
 
         .st-key-record_long_exposure [role="checkbox"]::before,
         .st-key-record_long_exposure [role="switch"]::before,
-        .st-key-record_long_exposure input[type="checkbox"] + div::before,
-        .st-key-record_long_exposure input[type="checkbox"] + div > div,
+        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"]))::before,
+        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) > div,
         .st-key-record_long_exposure [data-testid="stToggleSwitch"]::before,
         .st-key-record_long_exposure [data-testid="stToggleSwitch"] > div {{
             background: #fff !important;
@@ -623,19 +631,12 @@ def inject_css() -> None:
             box-shadow: 0 1px 3px var(--color-shadow-soft) !important;
         }}
 
-        .st-key-record_long_exposure [data-baseweb="checkbox"] > div,
-        .st-key-record_long_exposure label > div:first-child:has(input[type="checkbox"]),
-        .st-key-record_long_exposure label > div:first-child:has([role="checkbox"]),
-        .st-key-record_long_exposure label > div:first-child:has([role="switch"]),
-        .st-key-record_long_exposure label:has(input[type="checkbox"]:not(:checked)) > div:first-child,
-        .st-key-record_long_exposure label:has([aria-checked="false"]) > div:first-child {{
+        .st-key-record_long_exposure [data-baseweb="checkbox"] > div {{
             background: var(--record-toggle-off) !important;
             border-color: var(--record-toggle-off) !important;
         }}
 
-        .st-key-record_long_exposure [data-baseweb="checkbox"]:has(input[type="checkbox"]:checked) > div,
-        .st-key-record_long_exposure label:has(input[type="checkbox"]:checked) > div:first-child,
-        .st-key-record_long_exposure label:has([aria-checked="true"]) > div:first-child {{
+        .st-key-record_long_exposure [data-baseweb="checkbox"]:has(input[type="checkbox"]:checked) > div {{
             background: var(--record-danger) !important;
             border-color: var(--record-danger-strong) !important;
         }}
@@ -643,11 +644,29 @@ def inject_css() -> None:
         .st-key-record_long_exposure [data-baseweb="checkbox"] > div::before,
         .st-key-record_long_exposure [data-baseweb="checkbox"] > div::after,
         .st-key-record_long_exposure [data-baseweb="checkbox"] > div > div,
-        .st-key-record_long_exposure input[type="checkbox"] + div::before,
-        .st-key-record_long_exposure input[type="checkbox"] + div::after,
-        .st-key-record_long_exposure input[type="checkbox"] + div > div {{
+        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"]))::before,
+        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"]))::after,
+        .st-key-record_long_exposure input[type="checkbox"] + div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])) > div {{
             background: #fff !important;
             border-color: #fff !important;
+        }}
+
+        .st-key-record_shutter_value_text label [data-testid="stMarkdownContainer"] p {{
+            position: relative;
+            color: transparent !important;
+        }}
+
+        .st-key-record_shutter_value_text label [data-testid="stMarkdownContainer"] p::after {{
+            content: "셔터 1/N";
+            position: absolute;
+            inset: 0 auto auto 0;
+            color: var(--color-muted) !important;
+            white-space: nowrap;
+        }}
+
+        .st-key-right_drawer_panel:has(.st-key-record_long_exposure input[type="checkbox"]:checked) .st-key-record_shutter_value_text label [data-testid="stMarkdownContainer"] p::after,
+        .st-key-right_drawer_panel:has(.st-key-record_long_exposure [aria-checked="true"]) .st-key-record_shutter_value_text label [data-testid="stMarkdownContainer"] p::after {{
+            content: "셔터 N";
         }}
 
         .st-key-record_long_exposure [role="checkbox"]:hover {{
@@ -842,8 +861,7 @@ def ensure_state() -> None:
         "record_iso_text": "",
         "record_f_value": "",
         "record_focal": "",
-        "record_shutter_seconds_text": "",
-        "record_shutter_denominator_text": "",
+        "record_shutter_value_text": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1970,7 +1988,7 @@ def render_record_form() -> None:
             unsafe_allow_html=True,
         )
     with close_col:
-        close_clicked = st.button(" ", key="close_record_panel", help="닫기", use_container_width=False)
+        close_clicked = st.button("닫기", key="close_record_panel", use_container_width=False)
     if close_clicked:
         clear_record_selection()
         st.rerun()
@@ -2013,12 +2031,16 @@ def render_record_form() -> None:
             long_exposure = bool(st.session_state.get("record_long_exposure", False))
             shutter_col, focal_col = st.columns(2)
             with shutter_col:
-                if long_exposure:
-                    shutter_raw = st.text_input("셔터 N초", placeholder="1", key="record_shutter_seconds_text")
-                    shutter_speed = f"{shutter_raw.strip()}s" if shutter_raw.strip() else ""
-                else:
-                    shutter_raw = st.text_input("셔터 1/N", placeholder="125", key="record_shutter_denominator_text")
-                    shutter_speed = f"1/{shutter_raw.strip()}" if shutter_raw.strip() else ""
+                shutter_label = "셔터 N" if long_exposure else "셔터 1/N"
+                shutter_placeholder = "1" if long_exposure else "125"
+                shutter_raw = st.text_input(
+                    shutter_label,
+                    placeholder=shutter_placeholder,
+                    key="record_shutter_value_text",
+                )
+                shutter_speed = f"{shutter_raw.strip()}s" if long_exposure and shutter_raw.strip() else ""
+                if not long_exposure and shutter_raw.strip():
+                    shutter_speed = f"1/{shutter_raw.strip()}"
             with focal_col:
                 focal = st.text_input("화각", placeholder="35mm", key="record_focal")
 
