@@ -1305,6 +1305,9 @@ def ensure_state() -> None:
         "route_enabled": False,
         "route_mode": "차량",
         "route_spot_ids": [],
+        "route_coordinates": [],
+        "route_error": "",
+        "route_result_signature": None,
         "last_route_spot_nonce": None,
         "record_direction": 45,
         "record_date_text": now.strftime("%Y-%m-%d"),
@@ -1360,6 +1363,20 @@ def toggle_options_panel() -> None:
 
 def clear_route_selection() -> None:
     st.session_state.route_spot_ids = []
+    invalidate_route_result()
+
+
+def invalidate_route_result() -> None:
+    st.session_state.route_coordinates = []
+    st.session_state.route_error = ""
+    st.session_state.route_result_signature = None
+
+
+def route_signature() -> tuple[str, tuple[int, ...]]:
+    return (
+        str(st.session_state.get("route_mode", "차량")),
+        tuple(int(spot_id) for spot_id in st.session_state.get("route_spot_ids", [])),
+    )
 
 
 def activate_route_mode() -> None:
@@ -2362,7 +2379,14 @@ def add_route_layer(fmap: folium.Map, spots: list[dict[str, Any]]) -> None:
     if not route_spots:
         return
 
-    route_coordinates, route_error = calculate_route(spots)
+    route_coordinates: list[tuple[float, float]] = []
+    route_error = ""
+    if st.session_state.get("route_result_signature") == route_signature():
+        route_coordinates = [
+            (float(lat), float(lng))
+            for lat, lng in st.session_state.get("route_coordinates", [])
+        ]
+        route_error = str(st.session_state.get("route_error") or "")
     if route_error:
         st.toast(route_error, icon="!")
     if route_coordinates:
@@ -2670,37 +2694,66 @@ def render_route_controls(spots: list[dict[str, Any]]) -> None:
         st.markdown(
             f"""
             <div class="route-panel-head">
-                <p class="route-panel-title">경로 선택</p>
+                <p class="route-panel-title">경로 계산 모드</p>
                 <span class="route-panel-count">{len(route_spots)}개 지점</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        st.radio("이동 방식", ["차량", "도보"], horizontal=True, key="route_mode")
-        if route_spots:
-            route_items = "".join(
-                (
-                    '<li class="route-list-item">'
-                    f'<span class="route-list-order">{order}</span>'
-                    f'<span class="route-list-title" title="{escape(spot.get("title"))}">'
-                    f'{escape(spot.get("title") or "제목 없음")}</span>'
-                    "</li>"
+        select_tab, calculate_tab = st.tabs(["지점 선택", "경로 계산"])
+        with select_tab:
+            if route_spots:
+                route_items = "".join(
+                    (
+                        '<li class="route-list-item">'
+                        f'<span class="route-list-order">{order}</span>'
+                        f'<span class="route-list-title" title="{escape(spot.get("title"))}">'
+                        f'{escape(spot.get("title") or "제목 없음")}</span>'
+                        "</li>"
+                    )
+                    for order, spot in enumerate(route_spots, start=1)
                 )
-                for order, spot in enumerate(route_spots, start=1)
+                st.markdown(f'<ol class="route-list">{route_items}</ol>', unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    '<p class="route-list-empty">지도에서 경유할 지점을 순서대로 선택하세요.</p>',
+                    unsafe_allow_html=True,
+                )
+            st.button(
+                "선택 초기화",
+                key="clear_route_selection",
+                use_container_width=True,
+                disabled=not route_spots,
+                on_click=clear_route_selection,
             )
-            st.markdown(f'<ol class="route-list">{route_items}</ol>', unsafe_allow_html=True)
-        else:
-            st.markdown(
-                '<p class="route-list-empty">지도에서 경유할 지점을 순서대로 선택하세요.</p>',
-                unsafe_allow_html=True,
+        with calculate_tab:
+            st.radio(
+                "이동 방식",
+                ["차량", "도보"],
+                horizontal=True,
+                key="route_mode",
+                on_change=invalidate_route_result,
             )
-        st.button(
-            "선택 초기화",
-            key="clear_route_selection",
-            use_container_width=True,
-            disabled=not route_spots,
-            on_click=clear_route_selection,
-        )
+            calculate_disabled = len(route_spots) < 2
+            if st.button(
+                "경로 계산",
+                key="calculate_route_button",
+                type="primary",
+                use_container_width=True,
+                disabled=calculate_disabled,
+            ):
+                with st.spinner("경로 계산 중..."):
+                    coordinates, route_error = calculate_route(spots)
+                st.session_state.route_coordinates = coordinates
+                st.session_state.route_error = route_error or ""
+                st.session_state.route_result_signature = route_signature()
+            if calculate_disabled:
+                st.caption("지점을 2개 이상 선택하세요.")
+            elif st.session_state.get("route_result_signature") == route_signature():
+                if st.session_state.get("route_error"):
+                    st.error(str(st.session_state.route_error))
+                elif st.session_state.get("route_coordinates"):
+                    st.success("경로 계산 완료")
         st.button(
             "경로 모드 나가기",
             key="exit_route_mode",
@@ -3158,6 +3211,7 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         if spot_id not in route_spot_ids:
             route_spot_ids.append(spot_id)
             st.session_state.route_spot_ids = route_spot_ids
+            invalidate_route_result()
             st.rerun()
         return
     if event_type == "record_panel_out_of_bounds":
@@ -3213,11 +3267,7 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
 
 def render_map(spots: list[dict[str, Any]]) -> None:
     st.markdown('<div class="map-wrap">', unsafe_allow_html=True)
-    if st.session_state.get("route_enabled", False) and len(selected_route_spots(spots)) >= 2:
-        with st.spinner("경로 계산 중..."):
-            fmap = build_map(spots)
-    else:
-        fmap = build_map(spots)
+    fmap = build_map(spots)
     map_data = st_folium(
         fmap,
         height=1200,
