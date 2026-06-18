@@ -2100,8 +2100,13 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         active_spot = next((spot for spot in spots if spot["id"] == st.session_state.active_spot_id), None)
         if active_spot:
             center = (active_spot["lat"], active_spot["lng"])
-    tile_url = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-    tile_name = "Voyager"
+    dark_mode = bool(st.session_state.get("dark_mode", False))
+    tile_url = (
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        if dark_mode
+        else "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+    )
+    tile_name = "Dark Matter" if dark_mode else "Voyager"
     map_bg = ui_color("color-canvas")
     popup_surface = ui_color("color-surface")
     popup_text = ui_color("color-text")
