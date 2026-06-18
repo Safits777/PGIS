@@ -1286,9 +1286,12 @@ def ensure_state() -> None:
         "last_context_click_nonce": None,
         "last_panel_close_nonce": None,
         "last_delete_spot_nonce": None,
+        "last_edit_spot_nonce": None,
         "last_spot_select_nonce": None,
         "delete_feedback": "",
         "create_feedback": "",
+        "update_feedback": "",
+        "edit_spot_id": None,
         "options_panel_open": False,
         "dark_mode": False,
         "route_enabled": False,
@@ -1341,6 +1344,7 @@ def clear_record_selection() -> None:
     st.session_state.right_drawer_open = False
     st.session_state.picking_location = False
     st.session_state.selected_point = None
+    st.session_state.edit_spot_id = None
 
 
 def close_record_panel() -> None:
@@ -1584,12 +1588,55 @@ def is_recent_spot(spot: dict[str, Any], hours: int = 6) -> bool:
         return False
 
 
+def shutter_form_values(spot: dict[str, Any]) -> tuple[str, bool]:
+    shutter = spot_comp(spot).get("셔터스피드", "").strip()
+    if shutter.endswith("s") and not shutter.startswith("1/"):
+        return shutter[:-1].strip(), True
+    if shutter.startswith("1/"):
+        return shutter[2:].strip(), False
+    return shutter, False
+
+
+def begin_spot_edit(spot: dict[str, Any], client_point: dict[str, Any] | None = None) -> None:
+    shutter_value, long_exposure = shutter_form_values(spot)
+    comp = spot_comp(spot)
+    st.session_state.edit_spot_id = int(spot["id"])
+    st.session_state.active_spot_id = int(spot["id"])
+    st.session_state.selected_point = (float(spot["lat"]), float(spot["lng"]))
+    st.session_state.form_lat = float(spot["lat"])
+    st.session_state.form_lng = float(spot["lng"])
+    st.session_state.record_lat_text = f"{float(spot['lat']):.6f}"
+    st.session_state.record_lng_text = f"{float(spot['lng']):.6f}"
+    st.session_state.record_direction = spot_drct(spot)
+    st.session_state.record_title = str(spot.get("title") or "")
+    st.session_state.record_url = spot_url(spot)
+    st.session_state.record_password = spot_password(spot)
+    st.session_state.record_weather = str(spot.get("weather") or WEATHER_OPTIONS[0])
+    st.session_state.record_date_text = str(spot.get("date") or "")
+    st.session_state.record_time_text = str(spot.get("time") or "")
+    st.session_state.record_body = str(spot.get("body") or "")
+    st.session_state.record_lens = str(spot.get("lens") or "")
+    st.session_state.record_f_value = comp.get("F값", "")
+    st.session_state.record_iso_text = comp.get("ISO값", "")
+    st.session_state.record_shutter_value_text = shutter_value
+    st.session_state.record_focal = comp.get("화각", "")
+    st.session_state.record_long_exposure = long_exposure
+    if client_point:
+        try:
+            st.session_state.record_panel_x = int(round(float(client_point.get("x", 24))))
+            st.session_state.record_panel_y = int(round(float(client_point.get("y", 24))))
+        except (TypeError, ValueError):
+            pass
+    st.session_state.right_drawer_open = True
+    st.session_state.picking_location = False
+
+
 def render_direction_dial() -> int:
     current = int(st.session_state.get("record_direction", 45)) % 360
     returned = DIRECTION_DIAL_COMPONENT(
         value=current,
         dark=bool(st.session_state.get("dark_mode", False)),
-        key="record_direction_dial",
+        key=f"record_direction_dial_{st.session_state.get('edit_spot_id') or 'new'}",
         default=current,
     )
     direction = current
@@ -1734,8 +1781,11 @@ def record_popup_html(spot: dict[str, Any]) -> str:
     spot_id = int(spot.get("id", 0))
     return f"""
     <div style="position:relative;width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};padding-top:16px;">
+        <button type="button" class="pgis-popup-edit" data-spot-id="{spot_id}" title="수정">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11-4-4L4 16v4Zm12.5-16.5 4 4 1-1a1.4 1.4 0 0 0 0-2l-2-2a1.4 1.4 0 0 0-2 0l-1 1Z"/></svg>
+        </button>
         <button type="button" class="pgis-popup-delete" data-spot-id="{spot_id}" title="삭제"
-            style="position:absolute;top:-1px;right:28px;width:12px;height:12px;box-sizing:border-box;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;margin:0;padding:0;cursor:pointer;font-size:0;line-height:0;transform:none;"></button>
+            ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10l-1 13H8L7 7Zm2-3h6l1 2H8l1-2Zm-3 2h12v2H6V6Z"/></svg></button>
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
             <div style="font-size:12px;color:{muted};font-weight:800;text-transform:uppercase;">SPOT NODE</div>
             <div style="font-size:16px;font-weight:900;line-height:1.25;color:{text};">{escape(spot.get("title"))}</div>
@@ -1813,6 +1863,7 @@ class DirectionClickScript(MacroElement):
             var text = "{{ this.text }}";
             var spotId = {{ this.spot_id }};
             var recordPanelOpen = {{ this.record_panel_open }};
+            marker.options.pgisSpotId = spotId;
             function streamlitValue(payload) {
                 payload.center = map.getCenter();
                 payload.zoom = map.getZoom();
@@ -1940,14 +1991,43 @@ class SpotDeleteScript(MacroElement):
             }
             document.addEventListener("click", function(event) {
                 var target = event.target;
+                var editButton = target && target.closest ? target.closest(".pgis-popup-edit") : null;
                 var button = target && target.closest ? target.closest(".pgis-popup-delete") : null;
-                if (!button) {
+                if (!editButton && !button) {
                     return;
                 }
                 event.preventDefault();
                 event.stopPropagation();
-                var spotId = Number(button.getAttribute("data-spot-id"));
+                var actionButton = editButton || button;
+                var spotId = Number(actionButton.getAttribute("data-spot-id"));
                 if (!Number.isFinite(spotId) || spotId <= 0) {
+                    return;
+                }
+                if (editButton) {
+                    var editPassword = window.prompt("수정 password를 입력하세요.");
+                    if (editPassword === null) {
+                        return;
+                    }
+                    var spotLatLng = map.getCenter();
+                    map.eachLayer(function(layer) {
+                        if (
+                            layer &&
+                            layer.options &&
+                            Number(layer.options.pgisSpotId) === spotId &&
+                            layer.getLatLng
+                        ) {
+                            spotLatLng = layer.getLatLng();
+                        }
+                    });
+                    var point = map.latLngToContainerPoint(spotLatLng);
+                    map.closePopup();
+                    streamlitValue({
+                        _pgis_event: "edit_spot",
+                        _pgis_nonce: String(Date.now()) + "-" + String(Math.random()),
+                        spot_id: spotId,
+                        password: editPassword,
+                        client_point: { x: point.x, y: point.y }
+                    });
                     return;
                 }
                 var password = window.prompt("삭제 password를 입력하세요.");
@@ -3116,12 +3196,13 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 margin: 12px !important;
             }}
             .leaflet-popup-close-button {{
-                top: 12px !important;
-                right: 12px !important;
-                width: 12px !important;
-                height: 12px !important;
+                top: 10px !important;
+                right: 10px !important;
+                width: 14px !important;
+                height: 14px !important;
                 box-sizing: border-box !important;
-                display: block !important;
+                display: grid !important;
+                place-items: center !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 border-radius: 999px !important;
@@ -3134,18 +3215,57 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 transform: none !important;
                 vertical-align: top !important;
             }}
+            .leaflet-popup-close-button::before,
+            .leaflet-popup-close-button::after {{
+                content: "";
+                position: absolute;
+                width: 7px;
+                height: 1.5px;
+                border-radius: 999px;
+                background: #fff;
+            }}
+            .leaflet-popup-close-button::before {{ transform: rotate(45deg); }}
+            .leaflet-popup-close-button::after {{ transform: rotate(-45deg); }}
+            .pgis-popup-edit,
             .pgis-popup-delete {{
-                top: -1px !important;
-                right: 28px !important;
-                width: 12px !important;
-                height: 12px !important;
+                position: absolute;
+                top: -2px !important;
+                display: grid;
+                place-items: center;
+                width: 14px !important;
+                height: 14px !important;
                 box-sizing: border-box !important;
                 margin: 0 !important;
                 padding: 0 !important;
+                border-radius: 999px;
+                cursor: pointer;
                 transform: none !important;
                 vertical-align: top !important;
             }}
-            .pgis-recent-halo {{
+            .pgis-popup-edit {{
+                right: 42px !important;
+                border: 1px solid rgba(20, 83, 45, 0.55);
+                background: #22c55e;
+            }}
+            .pgis-popup-delete {{
+                right: 26px !important;
+                border: 1px solid rgba(120, 53, 15, 0.55);
+                background: #f59e0b;
+            }}
+            .pgis-popup-edit svg,
+            .pgis-popup-delete svg {{
+                width: 8px;
+                height: 8px;
+                fill: #fff;
+                pointer-events: none;
+            }}
+            .pgis-popup-edit:hover {{ background: #16a34a; }}
+            .pgis-popup-delete:hover {{ background: #d97706; }}
+            .pgis-recent-halo-outer {{
+                filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.72));
+                pointer-events: none;
+            }}
+            .pgis-recent-halo-inner {{
                 filter:
                     drop-shadow(0 0 2px rgba(255, 255, 255, 1))
                     drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))
@@ -3187,6 +3307,17 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     for spot in spots:
         color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
         if is_recent_spot(spot):
+            if not dark_mode:
+                folium.CircleMarker(
+                    location=(spot["lat"], spot["lng"]),
+                    radius=8.5,
+                    color="rgba(15, 23, 42, 0.82)",
+                    weight=3,
+                    opacity=0.9,
+                    fill=False,
+                    interactive=False,
+                    class_name="pgis-recent-halo-outer",
+                ).add_to(fmap)
             folium.CircleMarker(
                 location=(spot["lat"], spot["lng"]),
                 radius=8,
@@ -3195,7 +3326,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 opacity=0.96,
                 fill=False,
                 interactive=False,
-                class_name="pgis-recent-halo",
+                class_name="pgis-recent-halo-inner",
             ).add_to(fmap)
         marker = folium.CircleMarker(
             location=(spot["lat"], spot["lng"]),
@@ -3362,6 +3493,53 @@ def add_spot(
     return saved
 
 
+def update_spot(
+    spot_id: int,
+    title: str,
+    lat: float,
+    lng: float,
+    drct: int,
+    weather: str,
+    date_value: str,
+    time_value: str,
+    body: str,
+    lens: str,
+    comp: dict[str, str],
+    url: str,
+    password: str,
+) -> bool:
+    for index, current in enumerate(st.session_state.spots):
+        if int(current.get("id", 0)) != int(spot_id):
+            continue
+        updated = dict(current)
+        updated.update(
+            {
+                "title": title.strip(),
+                "URL": url.strip(),
+                "lat": float(lat),
+                "lng": float(lng),
+                "drct": int(drct) % 360,
+                "weather": weather,
+                "date": date_value.strip(),
+                "time": time_value.strip(),
+                "body": body.strip(),
+                "lens": lens.strip(),
+                "comp": comp,
+                "password": spot_password({"password": password}),
+            }
+        )
+        st.session_state.spots[index] = normalize_spot(updated, int(spot_id))
+        st.session_state.active_spot_id = int(spot_id)
+        st.session_state.map_center = (float(lat), float(lng))
+        if persist_spots():
+            st.session_state.update_feedback = "updated"
+            return True
+        st.session_state.spots[index] = current
+        return False
+    st.toast("수정할 지점을 찾지 못했습니다.", icon="⚠️")
+    return False
+
+
 def hide_spot(spot_id: int) -> bool:
     st.session_state.spots = [
         spot for spot in st.session_state.spots if int(spot.get("id", 0)) != int(spot_id)
@@ -3481,6 +3659,8 @@ def render_form() -> None:
 
 
 def render_record_form() -> None:
+    edit_spot_id = st.session_state.get("edit_spot_id")
+    editing = edit_spot_id is not None
     lat = float(st.session_state.form_lat)
     lng = float(st.session_state.form_lng)
     coord_label = f"{lat:.6f}, {lng:.6f}"
@@ -3490,7 +3670,7 @@ def render_record_form() -> None:
             f"""
             <div class="record-head">
                 <div>
-                    <div class="record-title">기록</div>
+                    <div class="record-title">{"지점 수정" if editing else "기록"}</div>
                     <div class="record-coord">{escape(coord_label)}</div>
                 </div>
             </div>
@@ -3568,7 +3748,11 @@ def render_record_form() -> None:
                 "화각": focal.strip(),
             }
 
-        submitted = st.form_submit_button("마커 생성", type="primary", use_container_width=True)
+        submitted = st.form_submit_button(
+            "수정 저장" if editing else "마커 생성",
+            type="primary",
+            use_container_width=True,
+        )
 
     if submitted:
         lat = parse_coordinate(record_lat_text, st.session_state.form_lat)
@@ -3588,20 +3772,37 @@ def render_record_form() -> None:
         elif not st.session_state.record_long_exposure and shutter_raw.strip() and not shutter_raw.strip().isdigit():
             st.error("셔터스피드 1/N은 숫자로 입력하세요.")
         else:
-            saved = add_spot(
-                title,
-                lat,
-                lng,
-                direction,
-                weather=weather,
-                date_value=date_value,
-                time_value=clock,
-                body=body,
-                lens=lens,
-                comp=comp,
-                url=url,
-                password=password,
-            )
+            if editing:
+                saved = update_spot(
+                    int(edit_spot_id),
+                    title,
+                    lat,
+                    lng,
+                    direction,
+                    weather,
+                    date_value,
+                    clock,
+                    body,
+                    lens,
+                    comp,
+                    url,
+                    password,
+                )
+            else:
+                saved = add_spot(
+                    title,
+                    lat,
+                    lng,
+                    direction,
+                    weather=weather,
+                    date_value=date_value,
+                    time_value=clock,
+                    body=body,
+                    lens=lens,
+                    comp=comp,
+                    url=url,
+                    password=password,
+                )
             if saved:
                 clear_record_selection()
                 st.rerun()
@@ -3816,6 +4017,32 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         store_map_view(map_data)
         clear_record_selection()
         return
+    if event_type == "edit_spot":
+        nonce = map_data.get("_pgis_nonce")
+        if nonce and nonce == st.session_state.get("last_edit_spot_nonce"):
+            return
+        st.session_state.last_edit_spot_nonce = nonce
+        store_map_view(map_data)
+        try:
+            spot_id = int(map_data.get("spot_id"))
+        except (TypeError, ValueError):
+            return
+        spot = next(
+            (
+                item
+                for item in available_spots(st.session_state.spots)
+                if int(item.get("id", 0)) == spot_id
+            ),
+            None,
+        )
+        if not spot:
+            st.toast("수정할 지점을 찾지 못했습니다.", icon="⚠️")
+            return
+        if str(map_data.get("password") or "").strip() != spot_password(spot):
+            st.toast("password가 일치하지 않아 수정할 수 없습니다.", icon="⚠️")
+            return
+        begin_spot_edit(spot, map_data.get("client_point") or {})
+        st.rerun()
     if event_type == "delete_spot":
         nonce = map_data.get("_pgis_nonce")
         if nonce and nonce == st.session_state.get("last_delete_spot_nonce"):
@@ -3884,6 +4111,9 @@ def main() -> None:
     if st.session_state.get("create_feedback") == "created":
         st.toast("지점을 생성했습니다.", icon="✨")
         st.session_state.create_feedback = ""
+    if st.session_state.get("update_feedback") == "updated":
+        st.toast("지점을 수정했습니다.", icon="✏️")
+        st.session_state.update_feedback = ""
     spots = available_spots(st.session_state.spots)
 
     render_map(spots)
