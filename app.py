@@ -454,6 +454,43 @@ def inject_css() -> None:
             height: 38px !important;
         }}
 
+        .st-key-route_mode_button {{
+            position: fixed;
+            top: 14px;
+            right: 60px;
+            z-index: 96;
+            width: 58px !important;
+            height: 38px !important;
+        }}
+
+        .st-key-route_mode_button button {{
+            width: 58px !important;
+            min-width: 58px !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            padding: 0 10px !important;
+            border-radius: var(--radius-md) !important;
+            border: 1px solid var(--color-border) !important;
+            background: var(--color-surface) !important;
+            color: var(--color-text) !important;
+            box-shadow: 0 10px 26px var(--color-shadow-soft);
+            font-size: 0.82rem !important;
+            font-weight: 800 !important;
+            line-height: 1 !important;
+        }}
+
+        .st-key-route_mode_button button:hover {{
+            border-color: var(--color-accent) !important;
+            background: var(--color-accent-soft) !important;
+        }}
+
+        .st-key-route_mode_button button:disabled {{
+            border-color: var(--color-accent) !important;
+            background: var(--color-accent) !important;
+            color: #fff !important;
+            opacity: 1 !important;
+        }}
+
         .st-key-options_menu_button button {{
             width: 38px !important;
             min-width: 38px !important;
@@ -1261,6 +1298,11 @@ def route_signature() -> tuple[str, tuple[int, ...]]:
 def exit_route_mode() -> None:
     st.session_state.route_enabled = False
     clear_route_selection()
+
+
+def enter_route_mode() -> None:
+    st.session_state.route_enabled = True
+    st.session_state.options_panel_open = False
 
 
 def toggle_record_location_picker() -> None:
@@ -3084,6 +3126,14 @@ def render_header(spots: list[dict[str, Any]]) -> None:
 
 
 def render_options_menu() -> None:
+    st.button(
+        "경로",
+        key="route_mode_button",
+        use_container_width=False,
+        on_click=enter_route_mode,
+        disabled=bool(st.session_state.get("route_enabled", False)),
+        help="경로 계산 모드",
+    )
     st.button(
         "☰",
         key="options_menu_button",
