@@ -1249,6 +1249,7 @@ def ensure_state() -> None:
         "last_context_click_nonce": None,
         "last_panel_close_nonce": None,
         "last_delete_spot_nonce": None,
+        "last_spot_select_nonce": None,
         "delete_feedback": "",
         "options_panel_open": False,
         "dark_mode": False,
@@ -1677,7 +1678,7 @@ def record_popup_html(spot: dict[str, Any]) -> str:
     return f"""
     <div style="position:relative;width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};padding-top:16px;">
         <button type="button" class="pgis-popup-delete" data-spot-id="{spot_id}" title="삭제"
-            style="position:absolute;top:0;right:32px;width:12px;height:12px;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;padding:0;cursor:pointer;font-size:0;line-height:0;"></button>
+            style="position:absolute;top:-1px;right:32px;width:12px;height:12px;box-sizing:border-box;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;margin:0;padding:0;cursor:pointer;font-size:0;line-height:0;transform:none;"></button>
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
             <div style="font-size:12px;color:{muted};font-weight:800;text-transform:uppercase;">SPOT NODE</div>
             <div style="font-size:16px;font-weight:900;line-height:1.25;color:{text};">{escape(spot.get("title"))}</div>
@@ -1754,6 +1755,24 @@ class DirectionClickScript(MacroElement):
             var surface = "{{ this.surface }}";
             var text = "{{ this.text }}";
             var spotId = {{ this.spot_id }};
+            var recordPanelOpen = {{ this.record_panel_open }};
+            function streamlitValue(payload) {
+                payload.center = map.getCenter();
+                payload.zoom = map.getZoom();
+                if (window.__GLOBAL_DATA__) {
+                    window.__GLOBAL_DATA__.previous_data = payload;
+                }
+                if (window.Streamlit && window.Streamlit.setComponentValue) {
+                    window.Streamlit.setComponentValue(payload);
+                    return;
+                }
+                window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: "streamlit:setComponentValue",
+                    value: payload,
+                    dataType: "json"
+                }, "*");
+            }
             function clearDirectionLayer() {
                 if (window.__pgisDirectionLayer) {
                     map.removeLayer(window.__pgisDirectionLayer);
@@ -1769,6 +1788,14 @@ class DirectionClickScript(MacroElement):
                     marker.closePopup();
                     window.__pgisSelectRouteSpot(spotId);
                     return;
+                }
+                if (recordPanelOpen) {
+                    recordPanelOpen = false;
+                    streamlitValue({
+                        _pgis_event: "select_spot",
+                        _pgis_nonce: String(Date.now()) + "-" + String(Math.random()),
+                        spot_id: spotId
+                    });
                 }
                 window.__pgisDirectionLayer = L.layerGroup([
                     L.circleMarker(start, {
@@ -1828,6 +1855,7 @@ class DirectionClickScript(MacroElement):
         self.color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
         self.surface = ui_color("color-surface")
         self.text = ui_color("color-text")
+        self.record_panel_open = "true" if st.session_state.get("right_drawer_open", False) else "false"
 
 
 class SpotDeleteScript(MacroElement):
@@ -2675,7 +2703,7 @@ def add_route_layer(fmap: folium.Map, spots: list[dict[str, Any]]) -> str | None
         ]
         route_error = str(st.session_state.get("route_error") or "")
     if route_error:
-        st.toast(route_error, icon="!")
+        st.toast(route_error, icon="⚠️")
     if route_coordinates:
         route_layer = folium.FeatureGroup(name="route_result", control=False)
         folium.PolyLine(
@@ -2700,6 +2728,7 @@ def add_route_layer(fmap: folium.Map, spots: list[dict[str, Any]]) -> str | None
 
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     center = st.session_state.get("map_center") or selected_point_value() or SEOUL_CENTER
+    pending_popup_spot_id = st.session_state.pop("pending_popup_spot_id", None)
     active_spot = None
     if st.session_state.active_spot_id:
         active_spot = next((spot for spot in spots if spot["id"] == st.session_state.active_spot_id), None)
@@ -2905,9 +2934,15 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             .pgis-route-clear,
             .pgis-route-calculate,
             .pgis-route-exit {{
+                display: flex;
+                align-items: center;
+                justify-content: center;
                 width: 100%;
+                height: 38px;
                 min-height: 38px;
+                box-sizing: border-box;
                 margin-top: 8px;
+                padding: 0 12px;
                 border: 1px solid {popup_border};
                 border-radius: 6px;
                 background: {ui_color("color-surface")};
@@ -2915,6 +2950,8 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 cursor: pointer;
                 font-size: 12px;
                 font-weight: 850;
+                line-height: 1;
+                vertical-align: top;
             }}
             .pgis-route-calculate {{
                 border-color: {ui_color("color-accent-strong")};
@@ -3028,6 +3065,7 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 height: 12px !important;
                 box-sizing: border-box !important;
                 display: block !important;
+                margin: 0 !important;
                 padding: 0 !important;
                 border-radius: 999px !important;
                 border: 1px solid rgba(127, 29, 29, 0.45) !important;
@@ -3036,6 +3074,18 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
                 font-size: 0 !important;
                 line-height: 0 !important;
                 text-shadow: none !important;
+                transform: none !important;
+                vertical-align: top !important;
+            }}
+            .pgis-popup-delete {{
+                top: -1px !important;
+                width: 12px !important;
+                height: 12px !important;
+                box-sizing: border-box !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                transform: none !important;
+                vertical-align: top !important;
             }}
             .leaflet-popup-close-button:hover {{
                 background: #dc2626 !important;
@@ -3076,7 +3126,11 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
             fill_color=color,
             fill_opacity=0.92 if active else 0.72,
             tooltip=str(spot.get("title") or ""),
-            popup=folium.Popup(record_popup_html(spot), max_width=320),
+            popup=folium.Popup(
+                record_popup_html(spot),
+                max_width=320,
+                show=int(spot["id"]) == pending_popup_spot_id,
+            ),
             bubbling_mouse_events=False,
         ).add_to(fmap)
         marker_records.append((marker.get_name(), spot))
@@ -3238,7 +3292,7 @@ def hide_spot_with_password(spot_id: int, password: str) -> bool:
         if int(spot.get("id", 0)) != int(spot_id):
             continue
         if str(password or "").strip() != spot_password(spot):
-            st.toast("password가 일치하지 않아 삭제하지 않았습니다.", icon="!")
+            st.toast("password가 일치하지 않아 삭제하지 않았습니다.", icon="⚠️")
             return False
         st.session_state.spots = [
             item for item in st.session_state.spots if int(item.get("id", 0)) != int(spot_id)
@@ -3249,7 +3303,7 @@ def hide_spot_with_password(spot_id: int, password: str) -> bool:
             st.session_state.delete_feedback = "deleted"
             return True
         return False
-    st.toast("삭제할 지점을 찾지 못했습니다.", icon="!")
+    st.toast("삭제할 지점을 찾지 못했습니다.", icon="⚠️")
     return False
 
 
@@ -3632,7 +3686,7 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
             if spot_id in available_ids and spot_id not in route_spot_ids:
                 route_spot_ids.append(spot_id)
         if len(route_spot_ids) < 2:
-            st.toast("경로 계산에는 지점이 2개 이상 필요합니다.", icon="!")
+            st.toast("경로 계산에는 지점이 2개 이상 필요합니다.", icon="⚠️")
             return
         route_mode = str(map_data.get("route_mode") or "차량")
         st.session_state.route_enabled = True
@@ -3655,6 +3709,23 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         st.rerun()
     if event_type in {"calculate_route", "exit_route_mode"}:
         return
+    if event_type == "select_spot":
+        nonce = map_data.get("_pgis_nonce")
+        if nonce and nonce == st.session_state.get("last_spot_select_nonce"):
+            return
+        st.session_state.last_spot_select_nonce = nonce
+        store_map_view(map_data)
+        try:
+            spot_id = int(map_data.get("spot_id"))
+        except (TypeError, ValueError):
+            return
+        available_ids = {int(spot["id"]) for spot in available_spots(st.session_state.spots)}
+        if spot_id not in available_ids:
+            return
+        clear_record_selection()
+        st.session_state.active_spot_id = spot_id
+        st.session_state.pending_popup_spot_id = spot_id
+        st.rerun()
     if event_type == "record_panel_out_of_bounds":
         nonce = map_data.get("_pgis_nonce")
         if nonce and nonce == st.session_state.get("last_panel_close_nonce"):
@@ -3672,7 +3743,7 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
         try:
             spot_id = int(map_data.get("spot_id"))
         except (TypeError, ValueError):
-            st.toast("삭제할 지점을 찾지 못했습니다.", icon="!")
+            st.toast("삭제할 지점을 찾지 못했습니다.", icon="⚠️")
             return
         if hide_spot_with_password(spot_id, str(map_data.get("password") or "")):
             st.rerun()
@@ -3726,7 +3797,7 @@ def main() -> None:
     render_options_menu()
     inject_direction_preview_bridge()
     if st.session_state.get("delete_feedback") == "deleted":
-        st.toast("지점을 삭제했습니다.", icon="OK")
+        st.toast("지점을 삭제했습니다.", icon="✅")
         st.session_state.delete_feedback = ""
     spots = available_spots(st.session_state.spots)
 
