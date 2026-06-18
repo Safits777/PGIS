@@ -703,7 +703,7 @@ def ensure_state() -> None:
     now = datetime.now()
     defaults = {
         "spots": load_spot_records(),
-        "selected_point": SEOUL_CENTER,
+        "selected_point": None,
         "map_center": SEOUL_CENTER,
         "active_spot_id": 1,
         "map_zoom": 12,
@@ -733,6 +733,22 @@ def ensure_state() -> None:
         normalize_spot(spot, index + 1)
         for index, spot in enumerate(st.session_state.get("spots", []))
     ]
+
+
+def selected_point_value(default: tuple[float, float] | None = SEOUL_CENTER) -> tuple[float, float] | None:
+    point = st.session_state.get("selected_point")
+    if isinstance(point, (list, tuple)) and len(point) == 2:
+        try:
+            return float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            pass
+    return default
+
+
+def clear_record_selection() -> None:
+    st.session_state.right_drawer_open = False
+    st.session_state.picking_location = False
+    st.session_state.selected_point = None
 
 
 def escape(value: Any) -> str:
@@ -1096,56 +1112,6 @@ def add_direction_vector(fmap: folium.Map, spot: dict[str, Any]) -> None:
     ).add_to(fmap)
 
 
-def add_selected_direction_preview(
-    fmap: folium.Map,
-    lat: float,
-    lng: float,
-    direction: int | float,
-) -> None:
-    color = ui_color("color-accent")
-    label_bg = ui_color("color-surface")
-    label_text = ui_color("color-text")
-    label_shadow = ui_color("color-shadow")
-    end_lat, end_lng = destination_point(lat, lng, direction, distance_m=420)
-    preview_line = folium.PolyLine(
-        locations=[(lat, lng), (end_lat, end_lng)],
-        color=color,
-        weight=4,
-        opacity=0.94,
-        dash_array="10, 8",
-    )
-    preview_line.add_to(fmap)
-    preview_end = folium.CircleMarker(
-        location=(end_lat, end_lng),
-        radius=5,
-        color=color,
-        weight=2,
-        fill=True,
-        fill_color=color,
-        fill_opacity=0.92,
-    )
-    preview_end.add_to(fmap)
-    preview_label = folium.Marker(
-        location=(end_lat, end_lng),
-        icon=folium.DivIcon(
-            class_name="pgis-direction-label",
-            html=(
-                f'<span style="background:{label_bg};color:{label_text};'
-                f'border:1px solid {color};box-shadow:0 12px 26px {label_shadow};">'
-                f"{int(round(float(direction))) % 360:03d} {compass_label(direction)}</span>"
-            ),
-            icon_size=(96, 26),
-            icon_anchor=(-8, 13),
-        ),
-    )
-    preview_label.add_to(fmap)
-    SelectedDirectionPreviewScript(
-        preview_line.get_name(),
-        preview_end.get_name(),
-        preview_label.get_name(),
-    ).add_to(fmap)
-
-
 class DirectionClickScript(MacroElement):
     _template = Template(
         """
@@ -1226,55 +1192,6 @@ class DirectionClickScript(MacroElement):
         self.color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
         self.surface = ui_color("color-surface")
         self.text = ui_color("color-text")
-
-
-class SelectedPointMarkerScript(MacroElement):
-    _template = Template(
-        """
-        {% macro script(this, kwargs) %}
-        (function() {
-            var layers = [{{ this.outer_name }}, {{ this.inner_name }}];
-            window.__pgisSelectedPointLayers = layers;
-            layers.forEach(function(layer) {
-                if (layer && layer.options) {
-                    layer.options.pgisSelectedPoint = true;
-                }
-            });
-        })();
-        {% endmacro %}
-        """
-    )
-
-    def __init__(self, outer_name: str, inner_name: str) -> None:
-        super().__init__()
-        self._name = "SelectedPointMarkerScript"
-        self.outer_name = outer_name
-        self.inner_name = inner_name
-
-
-class SelectedDirectionPreviewScript(MacroElement):
-    _template = Template(
-        """
-        {% macro script(this, kwargs) %}
-        (function() {
-            var layers = [{{ this.line_name }}, {{ this.end_name }}, {{ this.label_name }}];
-            window.__pgisSelectedDirectionLayers = layers;
-            layers.forEach(function(layer) {
-                if (layer && layer.options) {
-                    layer.options.pgisSelectedDirection = true;
-                }
-            });
-        })();
-        {% endmacro %}
-        """
-    )
-
-    def __init__(self, line_name: str, end_name: str, label_name: str) -> None:
-        super().__init__()
-        self._name = "SelectedDirectionPreviewScript"
-        self.line_name = line_name
-        self.end_name = end_name
-        self.label_name = label_name
 
 
 class RightClickSelectScript(MacroElement):
@@ -1374,6 +1291,9 @@ class RightClickSelectScript(MacroElement):
                 recordPanelOpen = false;
                 panelCloseNotified = true;
                 hideHostRecordPanel();
+                var closedLatLng = selectedLatLng;
+                selectedLatLng = null;
+                clearSelectedPointMarkers();
                 var center = map.getCenter();
                 sendComponentValue({
                     _pgis_event: "record_panel_out_of_bounds",
@@ -1383,9 +1303,9 @@ class RightClickSelectScript(MacroElement):
                         lat: center.lat,
                         lng: center.lng
                     },
-                    last_clicked: selectedLatLng ? {
-                        lat: selectedLatLng.lat,
-                        lng: selectedLatLng.lng
+                    last_clicked: closedLatLng ? {
+                        lat: closedLatLng.lat,
+                        lng: closedLatLng.lng
                     } : null
                 });
             }
@@ -1451,6 +1371,32 @@ class RightClickSelectScript(MacroElement):
                     }
                 });
             }
+            function drawSelectedPoint(latlng) {
+                clearSelectedPointMarkers();
+                window.__pgisSelectedPointLayer = L.layerGroup([
+                    L.circleMarker(latlng, {
+                        radius: 12,
+                        color: "{{ this.selected_ring }}",
+                        weight: 2,
+                        fill: true,
+                        fillColor: "{{ this.selected_fill }}",
+                        fillOpacity: 0.34,
+                        opacity: 0.94,
+                        pgisSelectedPoint: true,
+                        interactive: false
+                    }),
+                    L.circleMarker(latlng, {
+                        radius: 4,
+                        color: "{{ this.selected_inner_stroke }}",
+                        weight: 1,
+                        fill: true,
+                        fillColor: "{{ this.selected_inner_fill }}",
+                        fillOpacity: 0.96,
+                        pgisSelectedPoint: true,
+                        interactive: false
+                    })
+                ]).addTo(map);
+            }
             function drawDirectionPreview(latlng, bearing) {
                 if (window.__pgisSelectedDirectionLayer) {
                     map.removeLayer(window.__pgisSelectedDirectionLayer);
@@ -1499,8 +1445,12 @@ class RightClickSelectScript(MacroElement):
             });
             map.on("move zoom resize", requestRecordPanelSync);
             map.on("moveend zoomend", syncRecordPanelPosition);
-            if (recordPanelOpen) {
-                map.whenReady(requestRecordPanelSync);
+            if (recordPanelOpen && selectedLatLng) {
+                map.whenReady(function() {
+                    drawSelectedPoint(selectedLatLng);
+                    drawDirectionPreview(selectedLatLng, {{ this.default_direction }});
+                    requestRecordPanelSync();
+                });
             }
             map.on("contextmenu", function(event) {
                 if (event && event.originalEvent) {
@@ -1515,30 +1465,7 @@ class RightClickSelectScript(MacroElement):
                     window.__pgisDirectionLayer = null;
                 }
                 map.closePopup();
-                clearSelectedPointMarkers();
-                window.__pgisSelectedPointLayer = L.layerGroup([
-                    L.circleMarker(selectedLatLng, {
-                        radius: 12,
-                        color: "{{ this.selected_ring }}",
-                        weight: 2,
-                        fill: true,
-                        fillColor: "{{ this.selected_fill }}",
-                        fillOpacity: 0.34,
-                        opacity: 0.94,
-                        pgisSelectedPoint: true,
-                        interactive: false
-                    }),
-                    L.circleMarker(selectedLatLng, {
-                        radius: 4,
-                        color: "{{ this.selected_inner_stroke }}",
-                        weight: 1,
-                        fill: true,
-                        fillColor: "{{ this.selected_inner_fill }}",
-                        fillOpacity: 0.96,
-                        pgisSelectedPoint: true,
-                        interactive: false
-                    })
-                ]).addTo(map);
+                drawSelectedPoint(selectedLatLng);
                 drawDirectionPreview(selectedLatLng, {{ this.default_direction }});
                 var nonce = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
                 var original = event.originalEvent || {};
@@ -1583,14 +1510,19 @@ class RightClickSelectScript(MacroElement):
         self.selected_inner_fill = ui_color("color-text")
         self.direction_color = ui_color("color-accent")
         self.default_direction = int(st.session_state.get("record_direction", 45)) % 360
-        selected_lat, selected_lng = st.session_state.get("selected_point", SEOUL_CENTER)
+        selected_lat, selected_lng = selected_point_value(
+            (
+                float(st.session_state.get("form_lat", SEOUL_CENTER[0])),
+                float(st.session_state.get("form_lng", SEOUL_CENTER[1])),
+            )
+        )
         self.selected_lat = f"{float(selected_lat):.8f}"
         self.selected_lng = f"{float(selected_lng):.8f}"
         self.panel_open = "true" if st.session_state.get("right_drawer_open", False) else "false"
 
 
 def build_map(spots: list[dict[str, Any]]) -> folium.Map:
-    center = st.session_state.get("map_center", st.session_state.selected_point)
+    center = st.session_state.get("map_center") or selected_point_value() or SEOUL_CENTER
     active_spot = None
     if st.session_state.active_spot_id:
         active_spot = next((spot for spot in st.session_state.spots if spot["id"] == st.session_state.active_spot_id), None)
@@ -1605,11 +1537,6 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
     popup_shadow = f"0 20px 50px {ui_color('color-shadow')}"
     popup_inset = ui_color("color-highlight")
     popup_close_hover = ui_color("color-text")
-    selected_ring = ui_color("color-text")
-    selected_fill = ui_color("color-accent")
-    selected_inner_stroke = ui_color("color-surface")
-    selected_inner_fill = ui_color("color-text")
-
     fmap = folium.Map(
         location=center,
         zoom_start=st.session_state.map_zoom,
@@ -1691,41 +1618,6 @@ def build_map(spots: list[dict[str, Any]]) -> folium.Map:
         )
     )
     RightClickSelectScript(fmap).add_to(fmap)
-
-    lat, lng = st.session_state.selected_point
-    selected_outer = folium.CircleMarker(
-        location=(lat, lng),
-        radius=12,
-        color=selected_ring,
-        fill=True,
-        fill_color=selected_fill,
-        fill_opacity=0.34,
-        opacity=0.94,
-        weight=2,
-        tooltip="선택 지점",
-    )
-    selected_outer.add_to(fmap)
-
-    selected_inner = folium.CircleMarker(
-        location=(lat, lng),
-        radius=4,
-        color=selected_inner_stroke,
-        fill=True,
-        fill_color=selected_inner_fill,
-        fill_opacity=0.96,
-        weight=1,
-        tooltip="selected point",
-    )
-    selected_inner.add_to(fmap)
-    SelectedPointMarkerScript(selected_outer.get_name(), selected_inner.get_name()).add_to(fmap)
-
-    if st.session_state.get("right_drawer_open", False):
-        add_selected_direction_preview(
-            fmap,
-            float(lat),
-            float(lng),
-            int(st.session_state.get("record_direction", 45)) % 360,
-        )
 
     for spot in spots:
         color = WEATHER_COLORS.get(spot.get("weather", WEATHER_OPTIONS[0]), ui_color("color-accent"))
@@ -1850,7 +1742,8 @@ def add_spot(
     }
     st.session_state.spots.append(spot)
     st.session_state.active_spot_id = next_id
-    st.session_state.selected_point = (spot["lat"], spot["lng"])
+    st.session_state.selected_point = None
+    st.session_state.map_center = (spot["lat"], spot["lng"])
     st.session_state.form_lat = spot["lat"]
     st.session_state.form_lng = spot["lng"]
 
@@ -1960,64 +1853,69 @@ def render_record_form() -> None:
     with close_col:
         close_clicked = st.button("닫기", key="close_record_panel", use_container_width=True)
     if close_clicked:
-        st.session_state.right_drawer_open = False
-        st.session_state.picking_location = False
+        clear_record_selection()
         st.rerun()
 
-    dial_col, main_col = st.columns([0.42, 1.0])
-    with dial_col:
-        direction = render_direction_dial()
-    with main_col:
-        title = st.text_input("제목", placeholder="촬영 지점 이름", key="record_title")
-        url = st.text_input("URL", placeholder="https://instagram.com/...", key="record_url")
+    with st.form("record_form", clear_on_submit=False):
+        dial_col, main_col = st.columns([0.42, 1.0])
+        with dial_col:
+            direction = render_direction_dial()
+        with main_col:
+            title = st.text_input("제목", placeholder="촬영 지점 이름", key="record_title")
+            url = st.text_input("URL", placeholder="https://instagram.com/...", key="record_url")
 
-    weather_col, date_col, time_col = st.columns([0.72, 1.0, 0.82])
-    with weather_col:
-        weather = st.selectbox("날씨", WEATHER_OPTIONS, key="record_weather")
-    with date_col:
-        date_text = st.text_input("촬영 날짜", placeholder="YYYY-MM-DD", key="record_date_text")
-    with time_col:
-        time_text = st.text_input("시간", placeholder="17:30", key="record_time_text")
+        weather_col, date_col, time_col = st.columns([0.72, 1.0, 0.82])
+        with weather_col:
+            weather = st.selectbox("날씨", WEATHER_OPTIONS, key="record_weather")
+        with date_col:
+            date_text = st.text_input("촬영 날짜", placeholder="YYYY-MM-DD", key="record_date_text")
+        with time_col:
+            time_text = st.text_input("시간", placeholder="17:30", key="record_time_text")
 
-    advanced = st.toggle("ADVANCE", key="record_advance_open")
+        body = ""
+        lens = ""
+        comp = {"F값": "", "ISO값": "", "셔터스피드": "", "화각": ""}
+        shutter_raw = ""
+        shutter_speed = ""
 
-    body = ""
-    lens = ""
-    comp = {"F값": "", "ISO값": "", "셔터스피드": "", "화각": ""}
-    shutter_speed = ""
-    if advanced:
-        body_col, lens_col = st.columns(2)
-        with body_col:
-            body = st.text_input("바디", placeholder="Sony A7R V", key="record_body")
-        with lens_col:
-            lens = st.text_input("렌즈", placeholder="35mm F1.4", key="record_lens")
+        with st.expander("ADVANCE", expanded=bool(st.session_state.get("record_advance_open", False))):
+            advanced = st.toggle("세부 정보 저장", key="record_advance_open")
+            body_col, lens_col = st.columns(2)
+            with body_col:
+                body = st.text_input("바디", placeholder="Sony A7R V", key="record_body")
+            with lens_col:
+                lens = st.text_input("렌즈", placeholder="35mm F1.4", key="record_lens")
 
-        f_col, iso_col = st.columns(2)
-        with f_col:
-            f_value = st.text_input("F값", placeholder="2.8", key="record_f_value")
-        with iso_col:
-            iso_value = st.text_input("ISO값", placeholder="100", key="record_iso_text")
+            f_col, iso_col = st.columns(2)
+            with f_col:
+                f_value = st.text_input("F값", placeholder="2.8", key="record_f_value")
+            with iso_col:
+                iso_value = st.text_input("ISO값", placeholder="100", key="record_iso_text")
 
-        long_exposure = st.toggle("장노출", key="record_long_exposure")
-        shutter_col, focal_col = st.columns(2)
-        with shutter_col:
-            if long_exposure:
-                shutter_raw = st.text_input("셔터 N초", placeholder="1", key="record_shutter_seconds_text")
-                shutter_speed = f"{shutter_raw.strip()}s" if shutter_raw.strip() else ""
+            long_exposure = st.toggle("장노출", key="record_long_exposure")
+            shutter_col, focal_col = st.columns(2)
+            with shutter_col:
+                if long_exposure:
+                    shutter_raw = st.text_input("셔터 N초", placeholder="1", key="record_shutter_seconds_text")
+                    shutter_speed = f"{shutter_raw.strip()}s" if shutter_raw.strip() else ""
+                else:
+                    shutter_raw = st.text_input("셔터 1/N", placeholder="125", key="record_shutter_denominator_text")
+                    shutter_speed = f"1/{shutter_raw.strip()}" if shutter_raw.strip() else ""
+            with focal_col:
+                focal = st.text_input("화각", placeholder="35mm", key="record_focal")
+
+            if advanced:
+                comp = {
+                    "F값": f_value.strip(),
+                    "ISO값": iso_value.strip(),
+                    "셔터스피드": shutter_speed.strip(),
+                    "화각": focal.strip(),
+                }
             else:
-                shutter_raw = st.text_input("셔터 1/N", placeholder="125", key="record_shutter_denominator_text")
-                shutter_speed = f"1/{shutter_raw.strip()}" if shutter_raw.strip() else ""
-        with focal_col:
-            focal = st.text_input("화각", placeholder="35mm", key="record_focal")
+                body = ""
+                lens = ""
 
-        comp = {
-            "F값": f_value.strip(),
-            "ISO값": iso_value.strip(),
-            "셔터스피드": shutter_speed.strip(),
-            "화각": focal.strip(),
-        }
-
-    submitted = st.button("마커 생성", type="primary", use_container_width=True, key="record_submit")
+        submitted = st.form_submit_button("마커 생성", type="primary", use_container_width=True)
 
     if submitted:
         date_value = normalize_date_value(date_text)
@@ -2048,6 +1946,7 @@ def render_record_form() -> None:
                 comp=comp,
                 url=url,
             )
+            clear_record_selection()
             st.success("마커를 추가했습니다.")
             st.rerun()
 
@@ -2199,8 +2098,7 @@ def handle_map_return(map_data: dict[str, Any] | None) -> None:
             return
         st.session_state.last_panel_close_nonce = nonce
         store_map_view(map_data)
-        st.session_state.right_drawer_open = False
-        st.session_state.picking_location = False
+        clear_record_selection()
         return
     if event_type != "contextmenu":
         return
@@ -2247,6 +2145,7 @@ def main() -> None:
     ensure_state()
     inject_css()
     inject_direction_preview_bridge()
+    handle_map_return(st.session_state.get("photo_spot_map"))
     spots = st.session_state.spots
 
     render_map(spots)

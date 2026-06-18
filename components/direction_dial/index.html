@@ -224,15 +224,6 @@
         value: normalize(nextValue)
       };
       window.parent.postMessage(preview, "*");
-      try {
-        window.parent.document.querySelectorAll("iframe").forEach(function(frame) {
-          if (frame.contentWindow && frame !== window.frameElement) {
-            frame.contentWindow.postMessage(preview, "*");
-          }
-        });
-      } catch (error) {
-        // Cross-frame access can be restricted by the host; parent postMessage is enough as fallback.
-      }
     }
 
     function normalize(degrees) {
