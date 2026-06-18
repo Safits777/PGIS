@@ -25,7 +25,7 @@ SPOT_DATA_DIR = APP_DIR / "data" / "spots"
 SPOT_DATA_FILE = SPOT_DATA_DIR / "spots.json"
 LEGACY_SPOT_DATA_FILE = SPOT_DATA_DIR / "sample_spots.json"
 DATABASE_URL_ENV_KEYS = ("DATABASE_URL", "PGIS_DATABASE_URL", "POSTGRES_URL")
-DEFAULT_SPOT_PASSWORD = "shzzang0222"
+DEFAULT_SPOT_PASSWORD = "0000"
 COLOR_TOKEN_RE = re.compile(r"--(color-[a-z0-9-]+)\s*:\s*([^;]+);", re.IGNORECASE)
 COLOR_TOKEN_FALLBACKS = {
     "color-canvas": "#f7f8f6",
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS spots (
     body text NOT NULL DEFAULT '',
     lens text NOT NULL DEFAULT '',
     comp jsonb NOT NULL DEFAULT '{}'::jsonb,
-    password text NOT NULL DEFAULT 'shzzang0222',
+    password text NOT NULL DEFAULT '0000',
     available integer NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
@@ -193,8 +193,11 @@ def import_database_driver() -> tuple[Any, Any, Any]:
 def ensure_spots_table(conn: Any) -> None:
     with conn.cursor() as cur:
         cur.execute(SPOTS_TABLE_SQL)
-        cur.execute("ALTER TABLE spots ADD COLUMN IF NOT EXISTS password text NOT NULL DEFAULT 'shzzang0222';")
-        cur.execute("UPDATE spots SET password = 'shzzang0222' WHERE password IS NULL OR password = '';")
+        cur.execute("ALTER TABLE spots ADD COLUMN IF NOT EXISTS password text NOT NULL DEFAULT '0000';")
+        cur.execute(
+            "UPDATE spots SET password = '0000' "
+            "WHERE password IS NULL OR password = '' OR password = 'shzzang0222';"
+        )
 
 
 def load_spot_records_from_database() -> list[dict[str, Any]] | None:
@@ -687,6 +690,33 @@ def inject_css() -> None:
         .st-key-right_drawer_panel [data-baseweb="select"] > div {{
             min-height: 34px !important;
             font-size: 0.84rem !important;
+        }}
+
+        [data-testid="stTextInputRoot"] [data-baseweb="input"] button,
+        [data-testid="stTextInputRoot"] [data-baseweb="input"] button[kind="icon"] {{
+            width: 26px !important;
+            min-width: 26px !important;
+            height: 26px !important;
+            min-height: 26px !important;
+            padding: 0 !important;
+        }}
+
+        [data-testid="stTextInputRoot"] [data-baseweb="input"] button svg {{
+            width: 14px !important;
+            height: 14px !important;
+        }}
+
+        .st-key-right_drawer_panel [data-testid="stTextInputRoot"] [data-baseweb="input"] button,
+        .st-key-right_drawer_panel [data-testid="stTextInputRoot"] [data-baseweb="input"] button[kind="icon"] {{
+            width: 22px !important;
+            min-width: 22px !important;
+            height: 22px !important;
+            min-height: 22px !important;
+        }}
+
+        .st-key-right_drawer_panel [data-testid="stTextInputRoot"] [data-baseweb="input"] button svg {{
+            width: 12px !important;
+            height: 12px !important;
         }}
 
         .st-key-right_drawer_panel .stButton > button,
@@ -2196,7 +2226,7 @@ def add_spot(
         "body": body.strip(),
         "lens": lens.strip(),
         "time": time_value.strip(),
-        "password": password.strip(),
+        "password": spot_password({"password": password}),
         "comp": comp or {"F값": "", "ISO값": "", "셔터스피드": "", "화각": ""},
     }
     st.session_state.spots.append(spot)
@@ -2301,8 +2331,6 @@ def render_form() -> None:
     if submitted:
         if not title.strip():
             st.error("스팟명을 입력해주세요.")
-        elif not password.strip():
-            st.error("password를 입력해 주세요.")
         elif memo.strip() and not is_valid_link(memo):
             st.error("링크는 http:// 또는 https:// 형식으로 입력해주세요.")
         elif not normalize_date_value(date_text):
@@ -2425,8 +2453,6 @@ def render_record_form() -> None:
         clock = normalize_24h_clock(time_text)
         if not title.strip():
             st.error("제목을 입력하세요.")
-        elif not password.strip():
-            st.error("password를 입력해 주세요.")
         elif url.strip() and not is_valid_link(url):
             st.error("URL은 http:// 또는 https:// 형식이어야 합니다.")
         elif not date_value:
