@@ -41,6 +41,11 @@ COLOR_TOKEN_FALLBACKS = {
     "color-highlight": "rgba(255, 255, 255, 0.92)",
     "color-shadow": "rgba(31, 35, 40, 0.14)",
     "color-shadow-soft": "rgba(31, 35, 40, 0.08)",
+    "color-weather-sunny": "#f59e0b",
+    "color-weather-cloud": "#64748b",
+    "color-weather-rain": "#2563eb",
+    "color-weather-snow": "#7dd3fc",
+    "color-weather-fog": "#8b949e",
 }
 
 
@@ -320,11 +325,11 @@ st.set_page_config(
 WEATHER_OPTIONS = ["맑음", "구름", "비", "눈", "안개"]
 TIME_OPTIONS = ["오전", "오후"]
 WEATHER_COLORS = {
-    WEATHER_OPTIONS[0]: ui_color("color-accent"),
-    WEATHER_OPTIONS[1]: ui_color("color-muted"),
-    WEATHER_OPTIONS[2]: ui_color("color-accent-strong"),
-    WEATHER_OPTIONS[3]: ui_color("color-surface"),
-    WEATHER_OPTIONS[4]: ui_color("color-border-strong"),
+    WEATHER_OPTIONS[0]: ui_color("color-weather-sunny"),
+    WEATHER_OPTIONS[1]: ui_color("color-weather-cloud"),
+    WEATHER_OPTIONS[2]: ui_color("color-weather-rain"),
+    WEATHER_OPTIONS[3]: ui_color("color-weather-snow"),
+    WEATHER_OPTIONS[4]: ui_color("color-weather-fog"),
 }
 TIME_COLORS = {
     TIME_OPTIONS[0]: ui_color("color-accent-strong"),
