@@ -24,6 +24,7 @@ INDEX_HTML_PATH = APP_DIR / "index.html"
 SPOT_DATA_DIR = APP_DIR / "data" / "spots"
 SPOT_DATA_FILE = SPOT_DATA_DIR / "spots.json"
 LEGACY_SPOT_DATA_FILE = SPOT_DATA_DIR / "sample_spots.json"
+DATABASE_URL_ENV_KEYS = ("DATABASE_URL", "PGIS_DATABASE_URL", "POSTGRES_URL")
 COLOR_TOKEN_RE = re.compile(r"--(color-[a-z0-9-]+)\s*:\s*([^;]+);", re.IGNORECASE)
 COLOR_TOKEN_FALLBACKS = {
     "color-canvas": "#f7f8f6",
@@ -83,7 +84,161 @@ def spots_from_payload(payload: Any) -> list[dict[str, Any]]:
     return [dict(record) for record in records if isinstance(record, dict)]
 
 
+def configured_database_url() -> str:
+    for key in DATABASE_URL_ENV_KEYS:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def database_storage_enabled() -> bool:
+    return bool(configured_database_url())
+
+
+SPOTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS spots (
+    id integer PRIMARY KEY,
+    title text NOT NULL DEFAULT '',
+    url text NOT NULL DEFAULT '',
+    lat double precision NOT NULL,
+    lng double precision NOT NULL,
+    drct integer NOT NULL DEFAULT 0 CHECK (drct >= 0 AND drct < 360),
+    weather text NOT NULL DEFAULT '',
+    shot_date date,
+    shot_time time,
+    body text NOT NULL DEFAULT '',
+    lens text NOT NULL DEFAULT '',
+    comp jsonb NOT NULL DEFAULT '{}'::jsonb,
+    available integer NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+"""
+
+
+SPOTS_SELECT_SQL = """
+SELECT
+    id,
+    title,
+    url AS "URL",
+    lat,
+    lng,
+    drct,
+    weather,
+    COALESCE(shot_date::text, '') AS date,
+    COALESCE(to_char(shot_time, 'HH24:MI'), '') AS time,
+    body,
+    lens,
+    comp,
+    available AS "Available"
+FROM spots
+ORDER BY id;
+"""
+
+
+SPOTS_UPSERT_SQL = """
+INSERT INTO spots (
+    id,
+    title,
+    url,
+    lat,
+    lng,
+    drct,
+    weather,
+    shot_date,
+    shot_time,
+    body,
+    lens,
+    comp,
+    available
+) VALUES (
+    %s, %s, %s, %s, %s, %s, %s, NULLIF(%s, '')::date, NULLIF(%s, '')::time, %s, %s, %s, %s
+)
+ON CONFLICT (id) DO UPDATE SET
+    title = EXCLUDED.title,
+    url = EXCLUDED.url,
+    lat = EXCLUDED.lat,
+    lng = EXCLUDED.lng,
+    drct = EXCLUDED.drct,
+    weather = EXCLUDED.weather,
+    shot_date = EXCLUDED.shot_date,
+    shot_time = EXCLUDED.shot_time,
+    body = EXCLUDED.body,
+    lens = EXCLUDED.lens,
+    comp = EXCLUDED.comp,
+    available = EXCLUDED.available,
+    updated_at = now();
+"""
+
+
+def import_database_driver() -> tuple[Any, Any, Any]:
+    import psycopg
+    from psycopg.rows import dict_row
+    from psycopg.types.json import Jsonb
+
+    return psycopg, dict_row, Jsonb
+
+
+def ensure_spots_table(conn: Any) -> None:
+    with conn.cursor() as cur:
+        cur.execute(SPOTS_TABLE_SQL)
+
+
+def load_spot_records_from_database() -> list[dict[str, Any]] | None:
+    if not database_storage_enabled():
+        return None
+    try:
+        psycopg, dict_row, _ = import_database_driver()
+        with psycopg.connect(configured_database_url(), row_factory=dict_row) as conn:
+            ensure_spots_table(conn)
+            with conn.cursor() as cur:
+                cur.execute(SPOTS_SELECT_SQL)
+                return [dict(row) for row in cur.fetchall()]
+    except Exception as exc:
+        st.warning(f"DB에서 스팟을 불러오지 못해 JSON 파일을 사용합니다: {exc}")
+        return None
+
+
+def save_spot_records_to_database(spots: list[dict[str, Any]]) -> bool:
+    if not database_storage_enabled():
+        return False
+    try:
+        psycopg, _, Jsonb = import_database_driver()
+        normalized_spots = [normalize_spot(spot, index + 1) for index, spot in enumerate(spots)]
+        with psycopg.connect(configured_database_url()) as conn:
+            ensure_spots_table(conn)
+            with conn.cursor() as cur:
+                for spot in normalized_spots:
+                    cur.execute(
+                        SPOTS_UPSERT_SQL,
+                        (
+                            int(spot["id"]),
+                            spot["title"],
+                            spot_url(spot),
+                            float(spot["lat"]),
+                            float(spot["lng"]),
+                            int(spot["drct"]) % 360,
+                            spot["weather"],
+                            spot["date"],
+                            spot["time"],
+                            spot["body"],
+                            spot["lens"],
+                            Jsonb(spot_comp(spot)),
+                            spot_available(spot),
+                        ),
+                    )
+        return True
+    except Exception as exc:
+        st.error(f"DB 저장에 실패해 JSON 파일에만 저장합니다: {exc}")
+        return False
+
+
 def load_spot_records() -> list[dict[str, Any]]:
+    db_spots = load_spot_records_from_database()
+    if db_spots is not None:
+        return db_spots
+
     spots: list[dict[str, Any]] = []
     for path in spot_data_files():
         try:
@@ -95,6 +250,9 @@ def load_spot_records() -> list[dict[str, Any]]:
 
 
 def save_spot_records(spots: list[dict[str, Any]]) -> None:
+    if save_spot_records_to_database(spots):
+        return
+
     SPOT_DATA_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "version": 1,
