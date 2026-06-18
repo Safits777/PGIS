@@ -481,6 +481,42 @@ def inject_css() -> None:
             fill: var(--color-surface) !important;
         }}
 
+        [data-testid="stToast"],
+        [data-testid="stToast"] > div,
+        [data-baseweb="toast"] {{
+            color-scheme: {color_scheme} !important;
+            border-color: var(--color-border-strong) !important;
+            background: var(--color-surface) !important;
+            color: var(--color-text) !important;
+            box-shadow:
+                0 16px 38px var(--color-shadow),
+                inset 4px 0 0 var(--color-accent) !important;
+        }}
+
+        [data-testid="stToast"] p,
+        [data-testid="stToast"] span,
+        [data-testid="stToast"] div,
+        [data-baseweb="toast"] p,
+        [data-baseweb="toast"] span,
+        [data-baseweb="toast"] div {{
+            color: var(--color-text) !important;
+            font-weight: 750 !important;
+            text-shadow: none !important;
+        }}
+
+        [data-testid="stToast"] button,
+        [data-baseweb="toast"] button {{
+            color: var(--color-text) !important;
+            background: var(--color-surface-soft) !important;
+            border-color: var(--color-border) !important;
+        }}
+
+        [data-testid="stToast"] button svg,
+        [data-baseweb="toast"] button svg {{
+            color: var(--color-text) !important;
+            fill: currentColor !important;
+        }}
+
         .st-key-options_menu_button {{
             position: fixed;
             top: 14px;
