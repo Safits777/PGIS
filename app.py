@@ -1450,7 +1450,7 @@ def record_popup_html(spot: dict[str, Any]) -> str:
     return f"""
     <div style="position:relative;width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};padding-top:16px;">
         <button type="button" class="pgis-popup-delete" data-spot-id="{spot_id}" title="삭제"
-            style="position:absolute;top:0;right:32px;width:12px;height:12px;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;padding:0;cursor:pointer;font-size:0;line-height:0;"></button>
+            style="position:absolute;top:12px;right:32px;width:12px;height:12px;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;padding:0;cursor:pointer;font-size:0;line-height:0;"></button>
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
             <div style="font-size:12px;color:{muted};font-weight:800;text-transform:uppercase;">SPOT NODE</div>
             <div style="font-size:16px;font-weight:900;line-height:1.25;color:{text};">{escape(spot.get("title"))}</div>
