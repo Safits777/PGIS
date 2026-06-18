@@ -48,6 +48,20 @@ COLOR_TOKEN_FALLBACKS = {
     "color-weather-snow": "#7dd3fc",
     "color-weather-fog": "#8b949e",
 }
+THEME_DARK_TOKENS = {
+    "color-canvas": "#111315",
+    "color-surface": "#181b1f",
+    "color-surface-soft": "#20252a",
+    "color-border": "#343a40",
+    "color-border-strong": "#4b5560",
+    "color-text": "#eef2f4",
+    "color-muted": "#a6b0ba",
+    "color-accent-soft": "rgba(0, 120, 212, 0.28)",
+    "color-track": "#30363d",
+    "color-highlight": "rgba(255, 255, 255, 0.08)",
+    "color-shadow": "rgba(0, 0, 0, 0.42)",
+    "color-shadow-soft": "rgba(0, 0, 0, 0.28)",
+}
 
 
 def load_color_tokens() -> dict[str, str]:
@@ -63,12 +77,19 @@ def load_color_tokens() -> dict[str, str]:
     return tokens
 
 
+def current_color_tokens() -> dict[str, str]:
+    tokens = load_color_tokens()
+    if bool(st.session_state.get("dark_mode", False)):
+        tokens.update(THEME_DARK_TOKENS)
+    return tokens
+
+
 def ui_color(name: str) -> str:
-    return load_color_tokens().get(name, COLOR_TOKEN_FALLBACKS.get(name, COLOR_TOKEN_FALLBACKS["color-text"]))
+    return current_color_tokens().get(name, COLOR_TOKEN_FALLBACKS.get(name, COLOR_TOKEN_FALLBACKS["color-text"]))
 
 
 def css_color_token_block() -> str:
-    tokens = load_color_tokens()
+    tokens = current_color_tokens()
     return "\n".join(f"            --{name}: {value};" for name, value in tokens.items())
 
 
@@ -359,12 +380,13 @@ DIRECTION_DIAL_COMPONENT = components.declare_component(
 
 
 def inject_css() -> None:
+    color_scheme = "dark" if bool(st.session_state.get("dark_mode", False)) else "light"
     st.markdown(
         f"""
         <style>
         :root {{
 {css_color_token_block()}
-            color-scheme: light;
+            color-scheme: {color_scheme};
             --glass-bg: var(--color-surface);
             --glass-line: var(--color-border);
             --glass-text: var(--color-text);
@@ -417,6 +439,77 @@ def inject_css() -> None:
 
         [data-testid="stHeader"] {{
             display: none;
+        }}
+
+        .st-key-options_menu_button {{
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            z-index: 96;
+            width: 38px !important;
+            height: 38px !important;
+        }}
+
+        .st-key-options_menu_button button {{
+            width: 38px !important;
+            min-width: 38px !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            padding: 0 !important;
+            border-radius: var(--radius-md) !important;
+            border: 1px solid var(--color-border) !important;
+            background: var(--color-surface) !important;
+            color: var(--color-text) !important;
+            box-shadow: 0 10px 26px var(--color-shadow-soft);
+            font-size: 1.05rem !important;
+            line-height: 1 !important;
+        }}
+
+        .st-key-options_menu_button button:hover {{
+            border-color: var(--color-border-strong) !important;
+            background: var(--color-surface-soft) !important;
+        }}
+
+        .st-key-options_panel {{
+            position: fixed;
+            top: 58px;
+            right: 14px;
+            z-index: 95;
+            width: min(240px, calc(100vw - 28px));
+            padding: 0.75rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            background: var(--color-surface);
+            box-shadow: 0 18px 44px var(--color-shadow);
+            transform: translateY(-8px) scale(0.98);
+            opacity: 0;
+            pointer-events: none;
+            transition:
+                opacity 160ms ease,
+                transform 180ms cubic-bezier(.2, .8, .2, 1);
+        }}
+
+        .st-key-options_panel:has(.options-panel-state.is-open) {{
+            transform: translateY(0) scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }}
+
+        .st-key-options_panel [data-testid="stVerticalBlock"] {{
+            gap: 0.55rem;
+        }}
+
+        .options-panel-title {{
+            margin: 0;
+            color: var(--color-text);
+            font-size: 0.82rem;
+            line-height: 1.2;
+            font-weight: 900;
+        }}
+
+        .st-key-options_panel label {{
+            color: var(--color-text) !important;
+            font-weight: 750;
         }}
 
         .block-container {{
@@ -1077,6 +1170,8 @@ def ensure_state() -> None:
         "last_panel_close_nonce": None,
         "last_delete_spot_nonce": None,
         "delete_feedback": "",
+        "options_panel_open": False,
+        "dark_mode": False,
         "record_direction": 45,
         "record_date_text": now.strftime("%Y-%m-%d"),
         "record_time_text": now.strftime("%H:%M"),
@@ -1117,6 +1212,10 @@ def clear_record_selection() -> None:
 
 def close_record_panel() -> None:
     clear_record_selection()
+
+
+def toggle_options_panel() -> None:
+    st.session_state.options_panel_open = not bool(st.session_state.get("options_panel_open", False))
 
 
 def toggle_record_location_picker() -> None:
@@ -1306,7 +1405,12 @@ def normalize_spot(spot: dict[str, Any], fallback_id: int | None = None) -> dict
 
 def render_direction_dial() -> int:
     current = int(st.session_state.get("record_direction", 45)) % 360
-    returned = DIRECTION_DIAL_COMPONENT(value=current, key="record_direction_dial", default=current)
+    returned = DIRECTION_DIAL_COMPONENT(
+        value=current,
+        dark=bool(st.session_state.get("dark_mode", False)),
+        key="record_direction_dial",
+        default=current,
+    )
     direction = current
     if returned is not None:
         try:
@@ -1450,7 +1554,7 @@ def record_popup_html(spot: dict[str, Any]) -> str:
     return f"""
     <div style="position:relative;width:282px;box-sizing:border-box;font-family:Inter,Arial,sans-serif;color:{text};background:{surface};padding-top:16px;">
         <button type="button" class="pgis-popup-delete" data-spot-id="{spot_id}" title="삭제"
-            style="position:absolute;top:12px;right:32px;width:12px;height:12px;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;padding:0;cursor:pointer;font-size:0;line-height:0;"></button>
+            style="position:absolute;top:0;right:32px;width:12px;height:12px;border-radius:999px;border:1px solid rgba(120,53,15,.45);background:#f59e0b;padding:0;cursor:pointer;font-size:0;line-height:0;"></button>
         <div style="border-left:3px solid {color};padding-left:10px;margin-bottom:10px;">
             <div style="font-size:12px;color:{muted};font-weight:800;text-transform:uppercase;">SPOT NODE</div>
             <div style="font-size:16px;font-weight:900;line-height:1.25;color:{text};">{escape(spot.get("title"))}</div>
@@ -2202,6 +2306,20 @@ def render_header(spots: list[dict[str, Any]]) -> None:
     )
 
 
+def render_options_menu() -> None:
+    st.button(
+        "☰",
+        key="options_menu_button",
+        use_container_width=False,
+        on_click=toggle_options_panel,
+    )
+    panel_state = "is-open" if st.session_state.get("options_panel_open", False) else "is-closed"
+    with st.container(key="options_panel"):
+        st.markdown(f'<div class="options-panel-state {panel_state}"></div>', unsafe_allow_html=True)
+        st.markdown('<p class="options-panel-title">옵션</p>', unsafe_allow_html=True)
+        st.checkbox("다크모드", key="dark_mode")
+
+
 def add_spot(
     title: str,
     lat: float,
@@ -2703,6 +2821,7 @@ def render_map(spots: list[dict[str, Any]]) -> None:
 def main() -> None:
     ensure_state()
     inject_css()
+    render_options_menu()
     inject_direction_preview_bridge()
     if st.session_state.get("delete_feedback") == "deleted":
         st.toast("지점을 삭제했습니다.", icon="OK")

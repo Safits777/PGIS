@@ -27,6 +27,21 @@
       --frame-height: 110px;
     }
 
+    :root.theme-dark {
+      --color-canvas: #111315;
+      --color-surface: #181b1f;
+      --color-surface-soft: #20252a;
+      --color-border: #343a40;
+      --color-border-strong: #4b5560;
+      --color-text: #eef2f4;
+      --color-muted: #a6b0ba;
+      --color-accent-soft: rgba(0, 120, 212, 0.28);
+      --color-track: #30363d;
+      --color-highlight: rgba(255, 255, 255, 0.08);
+      --color-shadow: rgba(0, 0, 0, 0.42);
+      --color-shadow-soft: rgba(0, 0, 0, 0.28);
+    }
+
     * {
       box-sizing: border-box;
     }
@@ -256,6 +271,10 @@
       }
     }
 
+    function setTheme(isDark) {
+      root.classList.toggle("theme-dark", Boolean(isDark));
+    }
+
     shell.addEventListener("pointerdown", function(event) {
       event.preventDefault();
       dragging = true;
@@ -298,6 +317,7 @@
         return;
       }
       const args = event.data.args || {};
+      setTheme(args.dark);
       const incoming = Number(args.value);
       if (!Number.isNaN(incoming)) {
         render(incoming, false, false);
