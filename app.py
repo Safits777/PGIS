@@ -224,6 +224,11 @@ def save_spot_records_to_database(spots: list[dict[str, Any]]) -> bool:
         with psycopg.connect(configured_database_url()) as conn:
             ensure_spots_table(conn)
             with conn.cursor() as cur:
+                spot_ids = [int(spot["id"]) for spot in normalized_spots]
+                if spot_ids:
+                    cur.execute("DELETE FROM spots WHERE NOT (id = ANY(%s));", (spot_ids,))
+                else:
+                    cur.execute("DELETE FROM spots;")
                 for spot in normalized_spots:
                     cur.execute(
                         SPOTS_UPSERT_SQL,
@@ -2239,10 +2244,9 @@ def add_spot(
 
 
 def hide_spot(spot_id: int) -> bool:
-    for spot in st.session_state.spots:
-        if spot["id"] == spot_id:
-            spot["Available"] = 0
-            break
+    st.session_state.spots = [
+        spot for spot in st.session_state.spots if int(spot.get("id", 0)) != int(spot_id)
+    ]
     visible_spots = available_spots(st.session_state.spots)
     st.session_state.active_spot_id = visible_spots[0]["id"] if visible_spots else None
     return persist_spots()
@@ -2255,7 +2259,9 @@ def hide_spot_with_password(spot_id: int, password: str) -> bool:
         if str(password or "").strip() != spot_password(spot):
             st.toast("password가 일치하지 않아 삭제하지 않았습니다.", icon="!")
             return False
-        spot["Available"] = 0
+        st.session_state.spots = [
+            item for item in st.session_state.spots if int(item.get("id", 0)) != int(spot_id)
+        ]
         visible_spots = available_spots(st.session_state.spots)
         st.session_state.active_spot_id = visible_spots[0]["id"] if visible_spots else None
         if persist_spots():
